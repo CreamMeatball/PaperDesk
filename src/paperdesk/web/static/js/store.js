@@ -1,11 +1,14 @@
 // Client-side model of the library: folders + documents, with tree helpers. Views listen for "change".
 
+function normalize(text) { return String(text || "").replace(/\u00ad/g, "").replace(/\s+/g, " ").trim(); }
+
 export class LibraryStore extends EventTarget {
   constructor(api) {
     super();
     this.api = api;
     this.folders = [];
     this.documents = [];
+    this.readingList = [];
     var saved = [];
     try { saved = JSON.parse(localStorage.getItem("paperdesk-expanded") || "[]"); } catch (error) { saved = []; }
     this.expanded = new Set(saved);
@@ -15,6 +18,7 @@ export class LibraryStore extends EventTarget {
     var data = await this.api.get("/api/library");
     this.folders = data.folders;
     this.documents = data.documents;
+    this.readingList = data.reading_list || [];
     this.changed();
   }
 
@@ -80,6 +84,26 @@ export class LibraryStore extends EventTarget {
   async renameDocument(id, title) { await this.api.patch("/api/documents/" + id, { title: title }); await this.load(); }
   async moveDocument(id, folderId) { await this.api.patch("/api/documents/" + id, { folder_id: folderId || null }); await this.load(); }
   async deleteDocument(id) { await this.api.del("/api/documents/" + id); await this.load(); }
+
+  // ---- reading list ----
+  findReading(citation) {
+    var wanted = normalize(citation);
+    return this.readingList.find(function (item) { return normalize(item.citation) === wanted; }) || null;
+  }
+  async addReading(citation, sourceDocId) {
+    var result = await this.api.post("/api/reading-list", { citation: citation, source_doc_id: sourceDocId || null });
+    await this.load();
+    return result;
+  }
+  async renameReading(id, title) { await this.api.patch("/api/reading-list/" + id, { title: title }); await this.load(); }
+  async removeReading(id) { await this.api.del("/api/reading-list/" + id); await this.load(); }
+  async fetchArxiv(id) { var result = await this.api.post("/api/reading-list/" + id + "/arxiv", {}); await this.load(); return result; }
+  async attachReadingPdf(id, file) {
+    var result = await this.api.request("POST", "/api/reading-list/" + id + "/pdf", file,
+      { "Content-Type": "application/pdf", "X-Filename": encodeURIComponent(file.name) });
+    await this.load();
+    return result;
+  }
 
   async upload(files, folderId) {
     var added = 0, existing = 0, failed = [];

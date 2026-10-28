@@ -1,4 +1,5 @@
 import { h, icon, iconButton, toast, MOD } from "./ui.js";
+import { CitationPreview, ReferenceIndex } from "./references.js";
 
 var pdfjsPromise = null;
 function loadPdfjs() {
@@ -29,6 +30,8 @@ export class ReaderView {
     this.onSelection = this.onSelection.bind(this);
     this.onKey = this.onKey.bind(this);
     this.onResize = this.onResize.bind(this);
+    this.references = null;
+    this.citations = new CitationPreview(this, app);
     this.render();
     this.load();
   }
@@ -42,6 +45,7 @@ export class ReaderView {
     document.removeEventListener("keydown", this.onKey);
     window.removeEventListener("resize", this.onResize);
     this.hideMenu();
+    this.citations.destroy();
     if (this.pdf) this.pdf.destroy();
     this.app.assistant.attach(null);
   }
@@ -69,7 +73,9 @@ export class ReaderView {
       h("span", { style: "width:6px" }),
       iconButton("panel", "AI 도우미 (" + MOD + "J)", function () { app.toggleAssistant(); }));
     this.pagesEl = h("div", { class: "pages", tabindex: "-1" }, h("div", { class: "loading" }, "PDF를 여는 중…"));
-    this.pagesEl.addEventListener("scroll", function () { self.onScroll(); }, { passive: true });
+    this.pagesEl.addEventListener("scroll", function () { self.onScroll(); self.citations.hide(); }, { passive: true });
+    this.pagesEl.addEventListener("mousemove", this.citations.onMove);
+    this.pagesEl.addEventListener("mouseleave", function () { self.citations.scheduleHide(); });
     this.root.replaceChildren(h("div", { class: "reader" }, toolbar, this.pagesEl));
     document.addEventListener("selectionchange", this.onSelection);
     document.addEventListener("keydown", this.onKey);
@@ -205,6 +211,7 @@ export class ReaderView {
       layer.replaceChildren();
       await new this.lib.TextLayer({ textContentSource: page.streamTextContent(), container: layer, viewport: viewport }).render();
       state.rendered = scale;
+      this.indexCitations(state);
     } catch (error) {
       if (!error || error.name !== "RenderingCancelledException") console.warn(error);
     } finally {
@@ -243,18 +250,27 @@ export class ReaderView {
     this.pageInput.value = String(target.number);
   }
 
+  indexCitations(state) {
+    state.hotspots = this.references && this.references.ready ? this.references.hotspotsFor(state.el, state.number) : [];
+  }
+
   async extractText() {
     // Extract once per document; the server keeps it for search, summaries and the MCP server.
-    var texts = [];
+    // The same pass builds the bibliography index used by citation previews.
+    var texts = [], layout = [];
     try {
       for (var n = 1; n <= this.pdf.numPages; n++) {
         var page = await this.pdf.getPage(n);
         var content = await page.getTextContent();
+        layout.push({ width: page.view[2] - page.view[0], height: page.view[3] - page.view[1], items: content.items });
         texts.push(content.items.map(function (item) { return (item.str || "") + (item.hasEOL ? "\n" : " "); }).join("")
           .replace(/[ \t]+\n/g, "\n").replace(/ {2,}/g, " ").trim());
         if (!this.alive) return;
       }
       this.texts = texts;
+      this.references = ReferenceIndex.build(layout);
+      var self = this;
+      this.pages.forEach(function (p) { if (p.rendered) self.indexCitations(p); });
       if (!this.doc || this.doc.text_pages !== texts.length) {
         await this.app.api.put("/api/documents/" + this.id + "/text", { pages: texts });
         this.app.store.load();
@@ -307,6 +323,7 @@ export class ReaderView {
       h("button", { onclick: function () { run("translate"); } }, icon("translate"), "번역", h("kbd", null, "T")),
       h("button", { onclick: function () { run("explain"); } }, icon("sparkle"), "설명", h("kbd", null, "E")),
       h("button", { onclick: function () { self.hideMenu(); app.assistant.quote(info); } }, icon("question"), "질문", h("kbd", null, "Q")),
+      h("button", { title: "선택한 참고문헌을 읽어볼 논문에 추가", onclick: function () { self.hideMenu(); app.addToReadingList(info.text, self.id); } }, icon("bookmark"), "읽을 목록"),
       h("button", { onclick: function () { navigator.clipboard.writeText(info.text); self.hideMenu(); toast("복사했어요"); } }, icon("copy")));
     this.menu.addEventListener("mousedown", function (event) { event.preventDefault(); });
     document.body.append(this.menu);

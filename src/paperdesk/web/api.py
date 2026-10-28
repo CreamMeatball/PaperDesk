@@ -32,6 +32,11 @@ class ApiController:
             ("POST", "/api/folders", self.create_folder),
             ("PATCH", "/api/folders/{folder_id}", self.update_folder),
             ("DELETE", "/api/folders/{folder_id}", self.delete_folder),
+            ("POST", "/api/reading-list", self.add_reading),
+            ("PATCH", "/api/reading-list/{item_id}", self.update_reading),
+            ("DELETE", "/api/reading-list/{item_id}", self.delete_reading),
+            ("POST", "/api/reading-list/{item_id}/arxiv", self.reading_from_arxiv),
+            ("POST", "/api/reading-list/{item_id}/pdf", self.reading_attach_pdf),
             ("POST", "/api/assist", self.assist),
             ("GET", "/api/settings", self.settings),
             ("PUT", "/api/settings", self.update_settings),
@@ -48,6 +53,7 @@ class ApiController:
         return Response.json({
             "folders": [folder.to_dict() for folder in self.app.folders.list()],
             "documents": [doc.to_dict() for doc in self.app.library.list()],
+            "reading_list": [item.to_dict() for item in self.app.reading.list()],
         })
 
     def search(self, request: Request) -> Response:
@@ -106,6 +112,41 @@ class ApiController:
     def delete_folder(self, request: Request) -> Response:
         self.app.folders.delete(request.params["folder_id"])
         return Response.json({"ok": True})
+
+    def add_reading(self, request: Request) -> Response:
+        data = request.json()
+        item, created = self.app.reading.add(str(data.get("citation", "")), source_doc_id=data.get("source_doc_id") or None,
+                                             title=str(data.get("title") or ""))
+        return Response.json({"item": item.to_dict(), "created": created}, 201 if created else 200)
+
+    def update_reading(self, request: Request) -> Response:
+        data = request.json()
+        item = self.app.reading.update(request.params["item_id"], title=data.get("title"), note=data.get("note"))
+        return Response.json({"item": item.to_dict()})
+
+    def delete_reading(self, request: Request) -> Response:
+        self.app.reading.remove(request.params["item_id"])
+        return Response.json({"ok": True})
+
+    @staticmethod
+    def _folder_choice(data: dict) -> str | None:
+        # absent -> folder of the citing paper; null -> unfiled; id -> that folder
+        if "folder_id" not in data:
+            return None
+        return data["folder_id"] or ""
+
+    def reading_from_arxiv(self, request: Request) -> Response:
+        item, document = self.app.reading.fetch_arxiv_pdf(request.params["item_id"], self._folder_choice(request.json()))
+        return Response.json({"item": item.to_dict(), "document": document.to_dict()})
+
+    def reading_attach_pdf(self, request: Request) -> Response:
+        if len(request.body) > MAX_UPLOAD:
+            raise InvalidInput("파일이 너무 커요.")
+        query = request.query
+        folder = (query.get("folder") or "") if "folder" in query else None
+        item, document = self.app.reading.attach_pdf(request.params["item_id"], unquote(request.headers.get("X-Filename", "paper.pdf")),
+                                                     request.body, folder)
+        return Response.json({"item": item.to_dict(), "document": document.to_dict()})
 
     def assist(self, request: Request) -> Response:
         data = request.json()

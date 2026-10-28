@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from ..domain.models import Document, Folder
+from ..domain.models import Document, Folder, ReadingItem
 
 
 class DocumentRepository(ABC):
@@ -43,6 +43,23 @@ class FolderRepository(ABC):
 
     @abstractmethod
     def delete(self, folder_id: str) -> None: ...
+
+
+class ReadingListRepository(ABC):
+    @abstractmethod
+    def add(self, item: ReadingItem) -> None: ...
+
+    @abstractmethod
+    def get(self, item_id: str) -> ReadingItem | None: ...
+
+    @abstractmethod
+    def list(self) -> list[ReadingItem]: ...
+
+    @abstractmethod
+    def update(self, item: ReadingItem) -> None: ...
+
+    @abstractmethod
+    def delete(self, item_id: str) -> None: ...
 
 
 class PageTextRepository(ABC):

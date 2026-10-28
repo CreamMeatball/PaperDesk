@@ -34,7 +34,7 @@ class McpTests(unittest.TestCase):
         )
         self.assertEqual([r["id"] for r in replies], [1, 2, 3, 4, 5])
         self.assertEqual(replies[0]["result"]["protocolVersion"], "2025-06-18")
-        self.assertEqual({t["name"] for t in replies[1]["result"]["tools"]}, {"list_papers", "read_paper", "search_papers"})
+        self.assertEqual({t["name"] for t in replies[1]["result"]["tools"]}, {"list_papers", "read_paper", "search_papers", "list_reading_list"})
         papers = json.loads(replies[2]["result"]["content"][0]["text"])
         self.assertEqual((papers[0]["folder"], papers[0]["text_available"]), ("Vision", True))
         text = replies[3]["result"]["content"][0]["text"]

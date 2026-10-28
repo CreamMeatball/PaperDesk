@@ -30,6 +30,8 @@ export class Sidebar {
         function () { app.router.go("/library"); }, null, "all"),
       this.navItem("clock", "최근에 연 논문", null, route.name === "library" && route.scope === "recent",
         function () { app.router.go("/library?folder=recent"); }),
+      this.navItem("bookmark", "읽어볼 논문", app.store.readingList.filter(function (i) { return !i.in_library; }).length || null,
+        route.name === "library" && route.scope === "reading", function () { app.router.go("/library?folder=reading"); }),
       this.navItem("inbox", "분류 안 됨", app.store.documentsIn("unfiled").length, route.name === "library" && route.scope === "unfiled",
         function () { app.router.go("/library?folder=unfiled"); }, null, "unfiled"));
 

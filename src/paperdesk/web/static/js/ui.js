@@ -28,6 +28,8 @@ var ICONS = {
   monitor: '<rect x="3" y="4" width="14" height="10" rx="1.5"/><path d="M7 17h6M10 14v3"/>',
   copy: '<rect x="7" y="7" width="9" height="9" rx="1.5"/><path d="M4 13V5a1 1 0 0 1 1-1h8"/>',
   close: '<path d="m5 5 10 10M15 5 5 15"/>',
+  bookmark: '<path d="M6 3.5h8a1 1 0 0 1 1 1V17l-5-3.2L5 17V4.5a1 1 0 0 1 1-1z"/>',
+  check: '<path d="m4.5 10.5 3.5 3.5 7.5-8"/>',
   minus: '<path d="M4 10h12"/>',
   fit: '<path d="M4 8V4h4M16 8V4h-4M4 12v4h4M16 12v4h-4"/>',
   external: '<path d="M11 4h5v5M16 4l-7 7M14 12v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h3"/>'

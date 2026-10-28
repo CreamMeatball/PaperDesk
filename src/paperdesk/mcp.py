@@ -95,6 +95,16 @@ class SearchPapersTool(McpTool):
         return json.dumps(self.app.library.search(str(arguments.get("query", "")), 20), ensure_ascii=False, indent=1)
 
 
+class ListReadingListTool(McpTool):
+    name = "list_reading_list"
+    description = "List papers the user saved to read later (title, authors, year, arXiv id/DOI, and whether the PDF is already in the library)."
+    input_schema = {"type": "object", "properties": {}}
+
+    def call(self, arguments: dict) -> str:
+        keys = ("title", "authors", "year", "arxiv_id", "doi", "in_library", "note")
+        return json.dumps([{k: item.to_dict()[k] for k in keys} for item in self.app.reading.list()], ensure_ascii=False, indent=1)
+
+
 class StdioMcpServer:
     def __init__(self, tools: list[McpTool], *, stdin: IO[str] | None = None, stdout: IO[str] | None = None) -> None:
         self.tools = {tool.name: tool for tool in tools}
@@ -103,7 +113,7 @@ class StdioMcpServer:
 
     @classmethod
     def for_app(cls, app: Application, **streams: Any) -> "StdioMcpServer":
-        return cls([ListPapersTool(app), ReadPaperTool(app), SearchPapersTool(app)], **streams)
+        return cls([ListPapersTool(app), ReadPaperTool(app), SearchPapersTool(app), ListReadingListTool(app)], **streams)
 
     def serve(self) -> None:
         for line in self.stdin:

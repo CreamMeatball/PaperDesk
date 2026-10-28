@@ -6,6 +6,7 @@ import { LibraryView } from "./js/library.js";
 import { ReaderView } from "./js/reader.js";
 import { AssistantPanel } from "./js/assistant.js";
 import { SettingsView } from "./js/settings.js";
+import { ReadingListView } from "./js/reading.js";
 import { askText, confirmDialog, h, icon, modKey, toast } from "./js/ui.js";
 import { pdfFiles } from "./js/dnd.js";
 
@@ -64,13 +65,14 @@ class App {
     if (this.view && this.view.destroy) this.view.destroy();
     this.mainEl.replaceChildren();
     this.shell.classList.toggle("with-assistant", route.name === "reader");
-    this.view = new VIEWS[route.name](this.mainEl, this, route);
+    var View = route.name === "library" && route.scope === "reading" ? ReadingListView : VIEWS[route.name];
+    this.view = new View(this.mainEl, this, route);
     this.sidebar.render();
   }
 
   currentFolder() {
     var route = this.router.route;
-    if (route.name === "library" && ["all", "recent", "unfiled"].indexOf(route.scope) < 0) return route.scope;
+    if (route.name === "library" && ["all", "recent", "unfiled", "reading"].indexOf(route.scope) < 0) return route.scope;
     return null;
   }
 
@@ -184,6 +186,18 @@ class App {
       });
     })(null, 0);
     document.body.append(backdrop);
+  }
+
+  // ---- reading list ----
+  async addToReadingList(citation, sourceDocId) {
+    try {
+      var result = await this.store.addReading(citation, sourceDocId);
+      toast(result.created ? "'" + result.item.title + "'을(를) 읽어볼 논문에 추가했어요" : "이미 읽어볼 논문에 있어요");
+      return result.item;
+    } catch (error) {
+      toast(error.message, true);
+      return null;
+    }
   }
 
   // ---- documents ----

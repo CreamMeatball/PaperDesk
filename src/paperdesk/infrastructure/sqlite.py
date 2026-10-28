@@ -6,8 +6,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
-from ..domain.models import Document, Folder
-from ..ports.repositories import CompletionCache, DocumentRepository, FolderRepository, PageTextRepository
+from dataclasses import fields
+
+from ..domain.models import Document, Folder, ReadingItem
+from ..ports.repositories import CompletionCache, DocumentRepository, FolderRepository, PageTextRepository, ReadingListRepository
 
 # Append-only. Each entry upgrades the schema by one version (tracked in PRAGMA user_version).
 MIGRATIONS: tuple[str, ...] = (
@@ -41,6 +43,22 @@ MIGRATIONS: tuple[str, ...] = (
         key TEXT PRIMARY KEY,
         text TEXT NOT NULL,
         created_at TEXT NOT NULL
+    );
+    """,
+    """
+    CREATE TABLE reading_items (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        citation TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        authors TEXT NOT NULL DEFAULT '',
+        year TEXT NOT NULL DEFAULT '',
+        arxiv_id TEXT NOT NULL DEFAULT '',
+        doi TEXT NOT NULL DEFAULT '',
+        url TEXT NOT NULL DEFAULT '',
+        source_doc_id TEXT REFERENCES documents(id) ON DELETE SET NULL,
+        document_id TEXT REFERENCES documents(id) ON DELETE SET NULL,
+        note TEXT NOT NULL DEFAULT ''
     );
     """,
 )
@@ -145,6 +163,43 @@ class SqliteFolderRepository(FolderRepository):
     def delete(self, folder_id: str) -> None:
         with self._db.connect() as db:
             db.execute("DELETE FROM folders WHERE id = ?", (folder_id,))
+
+
+_READING_COLUMNS = [f.name for f in fields(ReadingItem)]
+
+
+class SqliteReadingListRepository(ReadingListRepository):
+    def __init__(self, database: Database) -> None:
+        self._db = database
+
+    @staticmethod
+    def _item(row: sqlite3.Row) -> ReadingItem:
+        return ReadingItem(**{key: row[key] for key in _READING_COLUMNS})
+
+    def add(self, item: ReadingItem) -> None:
+        values = {key: getattr(item, key) for key in _READING_COLUMNS}
+        with self._db.connect() as db:
+            db.execute(f"INSERT INTO reading_items ({', '.join(_READING_COLUMNS)}) VALUES ({', '.join(':' + c for c in _READING_COLUMNS)})", values)
+
+    def get(self, item_id: str) -> ReadingItem | None:
+        with self._db.connect() as db:
+            row = db.execute(f"SELECT {', '.join(_READING_COLUMNS)} FROM reading_items WHERE id = ?", (item_id,)).fetchone()
+        return self._item(row) if row else None
+
+    def list(self) -> list[ReadingItem]:
+        with self._db.connect() as db:
+            rows = db.execute(f"SELECT {', '.join(_READING_COLUMNS)} FROM reading_items ORDER BY created_at DESC").fetchall()
+        return [self._item(row) for row in rows]
+
+    def update(self, item: ReadingItem) -> None:
+        values = {key: getattr(item, key) for key in _READING_COLUMNS}
+        assignments = ", ".join(f"{c} = :{c}" for c in _READING_COLUMNS if c != "id")
+        with self._db.connect() as db:
+            db.execute(f"UPDATE reading_items SET {assignments} WHERE id = :id", values)
+
+    def delete(self, item_id: str) -> None:
+        with self._db.connect() as db:
+            db.execute("DELETE FROM reading_items WHERE id = ?", (item_id,))
 
 
 class SqlitePageTextRepository(PageTextRepository):

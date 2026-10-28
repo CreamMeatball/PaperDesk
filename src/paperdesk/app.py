@@ -6,11 +6,13 @@ from dataclasses import dataclass
 
 from .config import AppPaths
 from .infrastructure.blobs import FileBlobStore
+from .infrastructure.downloads import UrllibDownloader
 from .infrastructure.settings_store import JsonSettingsStore
 from .infrastructure.sqlite import (Database, SqliteCompletionCache, SqliteDocumentRepository, SqliteFolderRepository,
-                                    SqlitePageTextRepository)
+                                    SqlitePageTextRepository, SqliteReadingListRepository)
 from .platforms import Platform, current_platform
 from .ports.ai import CommandRunner, HttpClient
+from .ports.downloads import FileDownloader
 from .ports.secrets import SecretStore
 from .ports.settings import Settings, SettingsStore
 from .providers.registry import ProviderRegistry, default_registry
@@ -18,6 +20,7 @@ from .providers.transport import SubprocessRunner, UrllibHttpClient
 from .services.assistant import AssistantService
 from .services.library import FolderService, LibraryService
 from .services.prompts import PromptBuilder
+from .services.reading_list import ReadingListService
 from .services.settings import SettingsService
 
 
@@ -29,12 +32,13 @@ class Application:
     folders: FolderService
     assistant: AssistantService
     settings: SettingsService
+    reading: ReadingListService
 
     @classmethod
     def build(cls, paths: AppPaths | None = None, *, secrets: SecretStore | None = None,
               settings_store: SettingsStore | None = None, registry: ProviderRegistry | None = None,
               runner: CommandRunner | None = None, http: HttpClient | None = None,
-              platform: Platform | None = None) -> "Application":
+              platform: Platform | None = None, downloader: FileDownloader | None = None) -> "Application":
         platform = platform or current_platform()
         paths = (paths or AppPaths.default()).ensure()
         database = Database(paths.database)
@@ -50,5 +54,6 @@ class Application:
         )
         assistant = AssistantService(active_provider=settings.active_provider, prompts=PromptBuilder(),
                                      cache=SqliteCompletionCache(database))
-        return cls(paths, platform, library, folders, assistant, settings)
+        reading = ReadingListService(SqliteReadingListRepository(database), library, downloader or UrllibDownloader())
+        return cls(paths, platform, library, folders, assistant, settings, reading)
 

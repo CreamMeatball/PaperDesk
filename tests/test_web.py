@@ -54,6 +54,24 @@ class WebTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)["provider_id"], "demo")
 
+    def test_reading_list_endpoints(self):
+        status, body, _ = self.call("POST", "/api/reading-list", {"citation": "Jonathan Ho, Ajay Jain, and Pieter Abbeel. "
+                                    "Denoising diffusion probabilistic models. arXiv preprint arXiv:2006.11239, 2020."})
+        self.assertEqual(status, 201)
+        item = json.loads(body)["item"]
+        self.assertEqual((item["arxiv_id"], item["in_library"]), ("2006.11239", False))
+        status, body, _ = self.call("POST", "/api/reading-list", {"citation": "Ho et al. Denoising Diffusion Probabilistic Models. 2020"})
+        self.assertEqual((status, json.loads(body)["created"]), (200, False))
+        status, body, _ = self.call("POST", "/api/reading-list/" + item["id"] + "/pdf?folder=", raw=make_pdf(["DDPM"]),
+                                    headers={"Content-Type": "application/pdf", "X-Filename": "ddpm.pdf"})
+        data = json.loads(body)
+        self.assertTrue(data["item"]["in_library"])
+        self.assertEqual(data["document"]["title"], "Denoising diffusion probabilistic models")
+        _, body, _ = self.call("GET", "/api/library")
+        self.assertIn(item["id"], [i["id"] for i in json.loads(body)["reading_list"]])
+        status, _, _ = self.call("DELETE", "/api/reading-list/" + item["id"])
+        self.assertEqual(status, 200)
+
     def test_rejects_requests_without_app_header(self):
         status, body, _ = self.call("POST", "/api/folders", {"name": "x"}, headers={"X-Paperdesk": "0"})
         self.assertEqual(status, 403)

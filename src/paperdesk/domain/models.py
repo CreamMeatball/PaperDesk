@@ -51,6 +51,31 @@ class Document:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class ReadingItem:
+    """A paper the user wants to read later, usually saved from a citation. document_id is set once its PDF is in the library."""
+
+    id: str
+    title: str
+    citation: str
+    created_at: str
+    authors: str = ""
+    year: str = ""
+    arxiv_id: str = ""
+    doi: str = ""
+    url: str = ""
+    source_doc_id: str | None = None
+    document_id: str | None = None
+    note: str = ""
+
+    @property
+    def in_library(self) -> bool:
+        return self.document_id is not None
+
+    def to_dict(self) -> dict:
+        return {**asdict(self), "in_library": self.in_library}
+
+
 class AssistTask(str, Enum):
     TRANSLATE = "translate"
     EXPLAIN = "explain"
