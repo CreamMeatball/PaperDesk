@@ -28,7 +28,7 @@ class BlockInput:
 
     @property
     def source_hash(self) -> str:
-        return hashlib.sha256(self.text.encode()).hexdigest()[:24]
+        return hashlib.sha256("\u241e".join(self.sentences).encode()).hexdigest()[:24]
 
 
 def _extract_json(raw: str) -> dict | None:

@@ -4,6 +4,7 @@
 export class TextMap {
   constructor(pageEl) {
     this.el = pageEl;
+    this.page = Number(pageEl.dataset.page);
     this.nodes = [];
     this.nodeStart = [];   // compact index where each text node begins
     this.charNode = [];    // compact index -> node index
@@ -57,24 +58,57 @@ export class TextMap {
     return out;
   }
 
-  // Locate an analysis block line by line; returns [{blockStart, pageStart, length}] or null.
+  // Locate an analysis block (only its lines on this page); returns [{blockStart, pageStart, length}] or null.
+  // Lines usually match exactly; when the text layer has extra characters (sub/superscripts kept out of the
+  // analysed line) the line is matched as a subsequence and split into contiguous runs.
   locateBlock(block) {
     if (this.blockCache.has(block.key)) return this.blockCache.get(block.key);
     var segments = [], blockOffset = 0, cursor = 0, self = this;
     block.lines.forEach(function (line) {
       var needle = line.text.replace(/[\s\u00ad]+/g, "");
       if (!needle) return;
-      var at = self.compact.indexOf(needle, cursor);
-      if (at < 0) at = self.compact.indexOf(needle);
-      if (at >= 0) {
-        segments.push({ blockStart: blockOffset, pageStart: at, length: needle.length });
-        cursor = at + needle.length;
+      if (line.page === self.page) {
+        var at = self.compact.indexOf(needle, cursor);
+        if (at < 0) at = self.compact.indexOf(needle);
+        if (at >= 0) {
+          segments.push({ blockStart: blockOffset, pageStart: at, length: needle.length });
+          cursor = at + needle.length;
+        } else {
+          var runs = self.fuzzy(needle, cursor);
+          runs.forEach(function (r) { segments.push({ blockStart: blockOffset + r.needle, pageStart: r.page, length: r.length }); });
+          if (runs.length) cursor = runs[runs.length - 1].page + runs[runs.length - 1].length;
+        }
       }
       blockOffset += needle.length;
     });
     var result = segments.length ? segments : null;
     this.blockCache.set(block.key, result);
     return result;
+  }
+
+  // Subsequence match anchored on the first few characters; tolerates up to 6 extra page characters per gap
+  // and skips needle characters that the text layer lacks. Returns contiguous runs.
+  fuzzy(needle, from) {
+    var hay = this.compact, anchorLen = Math.min(8, needle.length), start = -1;
+    for (var shift = 0; shift < Math.min(needle.length - anchorLen + 1, 20) && start < 0; shift++) {
+      var anchor = needle.substr(shift, anchorLen), at = hay.indexOf(anchor, from);
+      if (at < 0) at = hay.indexOf(anchor);
+      if (at >= 0) start = { needle: shift, page: at };
+    }
+    if (!start || start === -1) return [];
+    var runs = [], i = start.needle, j = start.page, run = null, matched = 0;
+    while (i < needle.length && j < hay.length) {
+      if (needle[i] === hay[j]) {
+        if (run && run.needle + run.length === i && run.page + run.length === j) run.length++;
+        else { run = { needle: i, page: j, length: 1 }; runs.push(run); }
+        i++; j++; matched++;
+        continue;
+      }
+      var skip = hay.slice(j, j + 7).indexOf(needle[i]);
+      if (skip > 0) { j += skip; continue; }
+      i++; // character missing from the text layer
+    }
+    return matched >= needle.length * 0.7 ? runs : [];
   }
 
   // Block-compact [start, end) -> rects on the page.

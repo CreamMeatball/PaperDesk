@@ -27,6 +27,13 @@ export function compact(text) { return String(text || "").replace(/[\s\u00ad]+/g
 var ABBREV = /(?:\b(?:e\.g|i\.e|et al|etc|vs|cf|resp|approx|Fig|Figs|Eq|Eqs|Sec|Secs|Tab|Alg|No|Nos|Ref|Refs|Dr|Mr|Ms|Prof|St|Jr|Sr|Inc|Ltd|Co|Corp|Vol|pp|Ch|App|Thm|Lem|Def|Prop|Cor)|\b[A-Z]|\d)\.$/;
 
 export function splitSentences(text) {
+  var out = [];
+  // bullet lists: every "•" item is its own sentence group
+  String(text || "").split(/\s+(?=[•▪◦]\s)/).forEach(function (item) { out.push.apply(out, splitPlain(item)); });
+  return out;
+}
+
+function splitPlain(text) {
   var parts = String(text || "").split(/(?<=[.!?]["”’)\]]?)\s+(?=["“(\[]?[A-Z0-9])/);
   var out = [];
   parts.forEach(function (part) {
@@ -68,6 +75,24 @@ function pageLines(page) {
       row.runs.push(run);
       if (run.size > row.size) { row.size = run.size; row.base = run.base; }
     } else rows.push({ base: run.base, size: run.size, runs: [run] });
+  });
+  // Sub/superscripts sit on their own baseline; fold small, short rows into the neighbouring text row
+  // so "v" + "θ" or "word" + "2" stay on one line instead of splitting paragraphs.
+  var normal = median(rows.map(function (r) { return r.size; }));
+  rows = rows.filter(function (row, index) {
+    var text = row.runs.map(function (r) { return r.str; }).join("").replace(/\s+/g, "");
+    if (row.size >= normal * 0.8 || text.length > 8) return true;
+    var x0 = Math.min.apply(null, row.runs.map(function (r) { return r.x0; })), x1 = Math.max.apply(null, row.runs.map(function (r) { return r.x1; }));
+    var best = null, distance = Infinity;
+    [rows[index - 1], rows[index + 1]].forEach(function (other) {
+      if (!other || other.size < normal * 0.8) return;
+      var ox0 = Math.min.apply(null, other.runs.map(function (r) { return r.x0; })), ox1 = Math.max.apply(null, other.runs.map(function (r) { return r.x1; }));
+      var d = Math.abs(other.base - row.base);
+      if (d < other.size * 0.95 && x1 > ox0 - other.size && x0 < ox1 + other.size && d < distance) { best = other; distance = d; }
+    });
+    if (!best) return true;
+    best.runs = best.runs.concat(row.runs);
+    return false;
   });
   var lines = [];
   rows.forEach(function (row) {
@@ -231,6 +256,7 @@ function classify(block, ctx) {
     if (NAMED_HEADING.test(t) && words <= 6) return "heading";
     if (big && words >= 2 && words <= 14 && block.size >= ctx.body * 1.15 && /^[A-Z]/.test(t) && /[a-z]{3}/.test(t)) return "heading";
   }
+  if (block.size < ctx.body * 0.93 && block.top > page.height * 0.6) return "footnote";  // footnotes, affiliations, venue notes
   if (block.size < ctx.body * 0.92 && block.top > page.height * 0.7 &&
       (/^([\d*†‡§¶]|\s)/.test(t) || /^(corresponding|equal contribution|work done|code (is )?available|preprint|proceedings of|copyright)/i.test(t) || /@|https?:\/\//.test(t))) return "footnote";
   if (block.size < ctx.body * 0.86) return "figtext";
@@ -348,10 +374,16 @@ export function analyzeDocument(pages) {
   });
   markFrontMatter(doc);
   buildSections(doc);
+  mergeContinuations(doc);
   doc.blocks.forEach(function (b) {
     b.translatable = (b.kind === "paragraph" || b.kind === "heading" || b.kind === "caption" || b.kind === "title") && !b.reference;
-    if (b.translatable) b.sentences = b.kind === "paragraph" || b.kind === "caption" ? splitSentences(b.text) : [b.text];
+    if (b.translatable) {
+      b.sentences = b.kind === "paragraph" || b.kind === "caption" ? splitSentences(b.text) : [b.text];
+      // the key covers the sentence split too, so a better splitter never reuses a misaligned translation
+      b.key = b.page + ":" + hashText(b.sentences.map(compact).join("␞")).slice(0, 10);
+    }
   });
+  doc.sections.forEach(function (sec) { sec.keys = doc.blocks.filter(function (b) { return b.sectionId === sec.id && b.kind !== "merged"; }).map(function (b) { return b.key; }); });
   return doc;
 }
 
@@ -385,6 +417,35 @@ function groupEquations(blocks, body) {
 function sectionNumber(text) {
   var m = /^(\d{1,2})(?:\.\d+)*\.?\s/.exec(text);
   return m ? Number(m[1]) : null;
+}
+
+// A paragraph cut by a column or page break continues in the next paragraph block: join them so sentences stay whole.
+var BETWEEN = { furniture: 1, footnote: 1, figtext: 1, author: 1, table: 1, caption: 1, algorithm: 1 };
+function mergeContinuations(doc) {
+  var prev = null;
+  doc.blocks.forEach(function (b) {
+    b.parts = b.parts || [{ page: b.page, rect: b.rect }];
+    if (BETWEEN[b.kind] || b.reference || (b.kind === "equation" && b.text.length <= 3)) return;
+    if (b.kind !== "paragraph") { prev = null; return; }
+    var open = prev && !/[.!?:;]["”’)\]]?$/.test(prev.text);
+    var last = prev && prev.lines[prev.lines.length - 1];
+    var moved = prev && (b.page === prev.page + 1 || (b.page === prev.page && b.col !== last.col));
+    var adjacent = prev && b.page === prev.page && b.col === last.col && b.top - last.bottom < doc.body * 1.3;
+    var continues = /-$/.test(prev ? prev.text : "") || /^[a-z(,;]/.test(b.text);
+    if (open && (adjacent || (moved && continues)) && prev.sectionId === b.sectionId) {
+      prev.text = /[A-Za-z]-$/.test(prev.text) ? prev.text + b.text : prev.text + " " + b.text;
+      prev.lines = prev.lines.concat(b.lines);
+      prev.parts.push({ page: b.page, rect: b.rect });
+      b.kind = "merged";
+      b.mergedInto = prev.key;
+      return;
+    }
+    prev = b;
+  });
+  doc.blocks.forEach(function (b) {
+    if (b.parts.length > 1) b.key = b.page + ":" + hashText(compact(b.text)).slice(0, 10);
+  });
+  doc.sections.forEach(function (s) { s.keys = doc.blocks.filter(function (b) { return b.sectionId === s.id && b.kind !== "merged"; }).map(function (b) { return b.key; }); });
 }
 
 function markFrontMatter(doc) {

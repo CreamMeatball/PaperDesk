@@ -113,7 +113,7 @@ class PromptBuilder:
         return (f"Translate the paper passages into natural, consistent {request.target_language}. Each block is a list of "
                 "source sentences. Return exactly one translated sentence per source sentence, in order, so the lists line up; "
                 "merge nothing and split nothing. Keep citations like [12] or (Smith et al., 2020), numbers, LaTeX and "
-                "technical terms intact; translate figure/table words naturally. "
+                "technical terms intact; translate figure/table words naturally. Use one consistent formal written register for the whole paper (for Korean, the plain declarative -다 style). "
                 f"{('Keep these terms consistent: ' + request.question) if request.question else ''}"
                 '\nReply with JSON only: {"blocks": [{"id": "...", "sentences": ["..."]}]}'
                 f"{self._context(request)}\n\n<blocks>\n{request.text}\n</blocks>")

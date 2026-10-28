@@ -58,6 +58,17 @@ export class TranslationController {
     return info ? info.blocks.filter(function (b) { return b.translatable; }) : [];
   }
 
+  // Blocks with any part on this page (a paragraph continued from the previous column/page included), with that part's rect.
+  partsOn(page) {
+    if (!this.analysis) return [];
+    var out = [];
+    this.analysis.blocks.forEach(function (b) {
+      if (!b.translatable) return;
+      b.parts.forEach(function (part) { if (part.page === page) out.push({ block: b, rect: part.rect }); });
+    });
+    return out;
+  }
+
   // ---------- menu ----------
   openMenu(anchor) {
     var self = this, reader = this.reader, ready = !!this.analysis;
@@ -254,12 +265,15 @@ export class TranslationController {
   }
 
   showSentence(block, index) {
-    var state = this.reader.pages[block.page - 1];
-    if (!state || !state.map) return;
     this.clearSentence();
-    var range = this.sentenceRange(block, index);
-    var layer = state.el.querySelector(".layer.flash");
-    this.activeRects = drawRects(layer, state.map.blockRects(block, range[0], range[1]), "sent-hl");
+    var range = this.sentenceRange(block, index), reader = this.reader, rects = [];
+    var pages = new Set(block.parts.map(function (p) { return p.page; }));
+    pages.forEach(function (n) {
+      var state = reader.pages[n - 1];
+      if (!state || !state.map) return;
+      rects.push.apply(rects, drawRects(state.el.querySelector(".layer.flash"), state.map.blockRects(block, range[0], range[1]), "sent-hl"));
+    });
+    this.activeRects = rects;
     var selector = '.tcard[data-key="' + block.key + '"] .tsent[data-s="' + index + '"]';
     this.activeSpans = Array.prototype.slice.call(this.reader.pagesEl.querySelectorAll(selector));
     this.activeSpans.forEach(function (s) { s.classList.add("active"); });
@@ -323,9 +337,9 @@ export class TranslationController {
       var state = self.reader.pages[Number(pageEl.dataset.page) - 1];
       if (!state || !state.map) return;
       var box = pageEl.getBoundingClientRect(), px = (x - box.left) / box.width, py = (y - box.top) / box.height;
-      var blocks = self.blocksOn(state.number);
-      var block = blocks.find(function (b) { return rectContains(b.rect, px, py, 34 / box.width, 2 / box.height); });
-      if (block) self.showHover(state, block); else self.scheduleHideHover();
+      var hit = self.partsOn(state.number).find(function (p) { return rectContains(p.rect, px, py, 34 / box.width, 2 / box.height); });
+      var block = hit ? hit.block : null;
+      if (hit) self.showHover(state, block, hit.rect); else self.scheduleHideHover();
       // sentence under the pointer, for translated blocks
       var index = state.map.hitTest(x, y);
       if (index < 0 || !block || !self.store[block.key] || self.reader.tmode === "off") {
@@ -347,11 +361,11 @@ export class TranslationController {
     });
   }
 
-  showHover(state, block) {
+  showHover(state, block, rect) {
     clearTimeout(this.hideTimer);
     var layer = state.el.querySelector(".layer.ui");
     if (this.hover.parentNode !== layer) layer.append(this.hover);
-    var r = block.rect;
+    var r = rect || block.rect;
     this.hover.style.cssText = "left:" + r[0] * 100 + "%;top:" + r[1] * 100 + "%;width:" + (r[2] - r[0]) * 100 + "%;height:" + (r[3] - r[1]) * 100 + "%";
     this.hoverBlock = block;
     var translated = !!this.store[block.key], pending = this.pending.has(block.key);
