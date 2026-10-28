@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 class Settings:
     provider: str = ""  # empty until the user picks an AI on the settings page
     target_language: str = "English"
+    ui_language: str = "system"  # system | ko | en | ja | zh
     provider_options: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def options_for(self, provider_id: str) -> dict[str, str]:
@@ -17,6 +18,7 @@ class Settings:
         return {
             "provider": self.provider,
             "target_language": self.target_language,
+            "ui_language": self.ui_language,
             "provider_options": {k: dict(v) for k, v in self.provider_options.items()},
         }
 
@@ -27,6 +29,7 @@ class Settings:
         return cls(
             provider=str(data.get("provider", base.provider) or ""),
             target_language=str(data.get("target_language") or base.target_language),
+            ui_language=str(data.get("ui_language") or base.ui_language),
             provider_options={
                 str(pid): {str(k): str(v) for k, v in (values or {}).items()}
                 for pid, values in options.items()

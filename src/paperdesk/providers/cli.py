@@ -12,14 +12,15 @@ from typing import Callable, ClassVar
 from ..domain.errors import ProviderFailed, ProviderUnavailable, ReaderError
 from ..domain.models import Completion, Prompt, ProviderStatus
 from ..ports.ai import AIProvider, CommandResult, OptionField, ProviderContext
+from ..i18n import _
 
 # GUI-launched apps on macOS get a short PATH, so also look where installers usually put CLIs.
 COMMON_BIN_DIRS = ("/opt/homebrew/bin", "/usr/local/bin", "~/.local/bin", "~/.npm-global/bin", "~/bin")
 
 
 def binary_option(executable: str) -> OptionField:
-    return OptionField("binary", "실행 파일 경로", kind="path", placeholder=f"자동 탐색 ({executable})",
-                       help="비워 두면 PATH와 흔한 설치 위치에서 찾습니다.")
+    return OptionField("binary", _("실행 파일 경로"), kind="path", placeholder=_("자동 탐색 ({name})", name=executable),
+                       help=_("비워 두면 PATH와 흔한 설치 위치에서 찾습니다."))
 
 
 class CliProvider(AIProvider):
@@ -50,19 +51,19 @@ class CliProvider(AIProvider):
     def status(self) -> ProviderStatus:
         path = self.locate()
         if not path:
-            return ProviderStatus(False, f"'{self.executable}' 명령을 찾지 못했어요. 설치하고 터미널에서 한 번 로그인한 뒤 다시 확인하세요.")
+            return ProviderStatus(False, _("'{name}' 명령을 찾지 못했어요. 설치하고 터미널에서 한 번 로그인한 뒤 다시 확인하세요.", name=self.executable))
         if not self.login_args:
             return ProviderStatus(True, path)
         try:
             with tempfile.TemporaryDirectory(prefix="paperdesk-") as folder:
                 result = self.context.runner.run([path, *self.login_args], input_text="", cwd=Path(folder), timeout=10)
         except ReaderError:
-            return ProviderStatus(True, f"{path} · 로그인 상태를 확인하지 못했어요")
+            return ProviderStatus(True, _("{path} · 로그인 상태를 확인하지 못했어요", path=path))
         logged_in, detail = self.interpret_login(result)
-        return ProviderStatus(logged_in, f"{path} · {detail}")
+        return ProviderStatus(logged_in, _("{path} · {detail}", path=path, detail=detail))
 
     def interpret_login(self, result: CommandResult) -> tuple[bool, str]:
-        return result.returncode == 0, "로그인됨" if result.returncode == 0 else "로그인이 필요해요"
+        return result.returncode == 0, _("로그인됨") if result.returncode == 0 else _("로그인이 필요해요")
 
     def complete(self, prompt: Prompt) -> Completion:
         path = self.locate()
@@ -80,7 +81,7 @@ class CliProvider(AIProvider):
                 raise ProviderFailed(self.failure_message(result))
             text = self.parse_output(result, workdir).strip()
         if not text:
-            raise ProviderFailed(f"{self.label}가 빈 응답을 돌려줬어요.")
+            raise ProviderFailed(_("{name}가 빈 응답을 돌려줬어요.", name=self.label))
         return Completion(text, self.id, self.model)
 
     def stdin_text(self, prompt: Prompt) -> str:
@@ -88,7 +89,7 @@ class CliProvider(AIProvider):
 
     def failure_message(self, result: CommandResult) -> str:
         tail = " / ".join((result.stderr or result.stdout).strip().splitlines()[-4:])
-        return f"{self.label} 실행 실패 (코드 {result.returncode}): {tail[:500]}"
+        return _("{name} 실행 실패 (코드 {code}): {tail}", name=self.label, code=result.returncode, tail=tail[:500])
 
     @abstractmethod
     def build_command(self, path: str, prompt: Prompt, workdir: Path) -> list[str]: ...

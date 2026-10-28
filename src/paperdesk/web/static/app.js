@@ -9,6 +9,7 @@ import { SettingsView } from "./js/settings.js";
 import { ReadingListView } from "./js/reading.js";
 import { askText, confirmDialog, h, icon, modKey, toast } from "./js/ui.js";
 import { pdfFiles } from "./js/dnd.js";
+import { locale, setLocale, t } from "./js/i18n.js";
 
 var VIEWS = { library: LibraryView, reader: ReaderView, settings: SettingsView };
 
@@ -53,10 +54,23 @@ class App {
     } catch (error) {
       toast(error.message, true);
     }
-    this.render();
+    await this.applyLanguage(this.settings.data ? this.settings.data.ui_language : "system", true);
     if (!this.settings.data || !this.settings.data.provider) {
-      toast("설정에서 사용할 AI를 고르면 번역·설명을 쓸 수 있어요.");
+      toast(t("설정에서 사용할 AI를 고르면 번역·설명을 쓸 수 있어요."));
     }
+  }
+
+  // Load the UI catalog, then redraw everything (sidebar, current view, assistant panel).
+  async applyLanguage(choice, initial) {
+    var before = locale();
+    await setLocale(choice || "system");
+    document.getElementById("sidebar").setAttribute("aria-label", t("서재"));
+    document.getElementById("assistant").setAttribute("aria-label", t("AI 도우미"));
+    // Provider texts are localized by the server, so refetch when the language changed
+    // (at startup the first load went out before the saved language was known).
+    if (!initial || locale() !== before) await this.settings.load();
+    this.render();
+    if (this.assistant.reader) this.assistant.build();
   }
 
   render() {
@@ -106,12 +120,12 @@ class App {
   }
 
   async importFiles(files, folderId) {
-    if (!files.length) { toast("PDF 파일만 추가할 수 있어요.", true); return; }
-    toast(files.length + "개 파일을 추가하는 중…");
+    if (!files.length) { toast(t("PDF 파일만 추가할 수 있어요."), true); return; }
+    toast(t("{n}개 파일을 추가하는 중…", { n: files.length }));
     var result = await this.store.upload(files, folderId);
     var parts = [];
-    if (result.added) parts.push(result.added + "편 추가");
-    if (result.existing) parts.push(result.existing + "편은 이미 있음");
+    if (result.added) parts.push(t("{n}편 추가", { n: result.added }));
+    if (result.existing) parts.push(t("{n}편은 이미 있음", { n: result.existing }));
     if (parts.length) toast(parts.join(", "));
     result.failed.forEach(function (message) { toast(message, true); });
   }
@@ -119,7 +133,7 @@ class App {
   // ---- folders ----
   async newFolder(parentId) {
     var parent = parentId ? this.store.folder(parentId) : null;
-    var name = await askText({ title: parent ? "'" + parent.name + "' 안에 새 폴더" : "새 폴더", placeholder: "예: Diffusion, 강화학습, 읽을 거리", confirm: "만들기" });
+    var name = await askText({ title: parent ? t("'{name}' 안에 새 폴더", { name: parent.name }) : t("새 폴더"), placeholder: t("예: Diffusion, 강화학습, 읽을 거리"), confirm: t("만들기") });
     if (!name) return;
     try {
       var folder = await this.store.createFolder(name, parentId);
@@ -128,7 +142,7 @@ class App {
   }
 
   async renameFolder(folder) {
-    var name = await askText({ title: "폴더 이름 바꾸기", value: folder.name, confirm: "바꾸기" });
+    var name = await askText({ title: t("폴더 이름 바꾸기"), value: folder.name, confirm: t("바꾸기") });
     if (!name || name === folder.name) return;
     try { await this.store.renameFolder(folder.id, name); } catch (error) { toast(error.message, true); }
   }
@@ -136,9 +150,9 @@ class App {
   async deleteFolder(folder) {
     var count = this.store.countIn(folder.id);
     var ok = await confirmDialog({
-      title: "'" + folder.name + "' 폴더를 삭제할까요?",
-      message: count ? "안에 있는 논문 " + count + "편과 하위 폴더는 지워지지 않고 한 단계 위로 옮겨져요." : "빈 폴더예요.",
-      confirm: "삭제", danger: true
+      title: t("'{name}' 폴더를 삭제할까요?", { name: folder.name }),
+      message: count ? t("안에 있는 논문 {n}편과 하위 폴더는 지워지지 않고 한 단계 위로 옮겨져요.", { n: count }) : t("빈 폴더예요."),
+      confirm: t("삭제"), danger: true
     });
     if (!ok) return;
     var parent = folder.parent_id;
@@ -159,7 +173,7 @@ class App {
       for (var i = 0; i < ids.length; i++) await this.api.patch("/api/documents/" + ids[i], { folder_id: folderId || null });
       await this.store.load();
       var folder = folderId ? this.store.folder(folderId) : null;
-      toast(ids.length + "편을 '" + (folder ? folder.name : "분류 안 됨") + "'(으)로 옮겼어요");
+      toast(t("{n}편을 '{folder}'(으)로 옮겼어요", { n: ids.length, folder: folder ? folder.name : t("분류 안 됨") }));
     } catch (error) { toast(error.message, true); await this.store.load(); }
   }
 
@@ -170,14 +184,14 @@ class App {
     if (target.folder) blocked.add(target.folder.id);
     var list = h("div", { class: "menu", style: "position:static;box-shadow:none;border:0;background:transparent;max-height:50vh;overflow:auto;padding:0" });
     var backdrop = h("div", { class: "backdrop", onmousedown: function (event) { if (event.target === backdrop) backdrop.remove(); } },
-      h("div", { class: "dialog" }, h("h3", null, target.folder ? "'" + target.folder.name + "' 옮기기" : "폴더로 옮기기"), list,
-        h("div", { class: "buttons" }, h("button", { class: "btn", onclick: function () { backdrop.remove(); } }, "취소"))));
+      h("div", { class: "dialog" }, h("h3", null, target.folder ? t("'{name}' 옮기기", { name: target.folder.name }) : t("폴더로 옮기기")), list,
+        h("div", { class: "buttons" }, h("button", { class: "btn", onclick: function () { backdrop.remove(); } }, t("취소")))));
     function choose(folderId) {
       backdrop.remove();
       if (target.folder) self.moveFolder(target.folder.id, folderId);
       else self.moveDocuments(target.documents, folderId);
     }
-    list.append(h("button", { onclick: function () { choose(null); } }, icon(target.folder ? "books" : "inbox"), target.folder ? "맨 위" : "분류 안 됨"));
+    list.append(h("button", { onclick: function () { choose(null); } }, icon(target.folder ? "books" : "inbox"), target.folder ? t("맨 위") : t("분류 안 됨")));
     (function walk(parentId, depth) {
       store.children(parentId).forEach(function (folder) {
         if (blocked.has(folder.id)) return;
@@ -192,7 +206,7 @@ class App {
   async addToReadingList(citation, sourceDocId) {
     try {
       var result = await this.store.addReading(citation, sourceDocId);
-      toast(result.created ? "'" + result.item.title + "'을(를) 읽어볼 논문에 추가했어요" : "이미 읽어볼 논문에 있어요");
+      toast(result.created ? t("'{title}'을(를) 읽어볼 논문에 추가했어요", { title: result.item.title }) : t("이미 읽어볼 논문에 있어요"));
       return result.item;
     } catch (error) {
       toast(error.message, true);
@@ -202,7 +216,7 @@ class App {
 
   // ---- documents ----
   async renameDocument(doc) {
-    var title = await askText({ title: "논문 이름 바꾸기", value: doc.title, confirm: "바꾸기" });
+    var title = await askText({ title: t("논문 이름 바꾸기"), value: doc.title, confirm: t("바꾸기") });
     if (!title || title === doc.title) return;
     try {
       await this.store.renameDocument(doc.id, title);
@@ -213,8 +227,8 @@ class App {
   async deleteDocuments(ids) {
     var single = ids.length === 1 ? this.store.document(ids[0]) : null;
     var ok = await confirmDialog({
-      title: single ? "'" + single.title + "'을(를) 삭제할까요?" : ids.length + "편을 삭제할까요?",
-      message: "PDF와 AI 대화 기록이 이 컴퓨터에서 지워져요.", confirm: "삭제", danger: true
+      title: single ? t("'{title}'을(를) 삭제할까요?", { title: single.title }) : t("{n}편을 삭제할까요?", { n: ids.length }),
+      message: t("PDF와 AI 대화 기록이 이 컴퓨터에서 지워져요."), confirm: t("삭제"), danger: true
     });
     if (!ok) return;
     try {
@@ -240,4 +254,3 @@ class App {
 
 window.paperdesk = new App();
 window.paperdesk.start();
-

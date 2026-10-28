@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from ..domain.errors import InvalidInput, NotFound, ReaderError
+from ..i18n import _, translate
 
 
 class MethodNotAllowed(ReaderError):
@@ -22,6 +23,7 @@ class Request:
     headers: Mapping[str, str]
     body: bytes = b""
     params: dict[str, str] = field(default_factory=dict)
+    lang: str = "ko"
 
     def json(self) -> dict:
         if not self.body:
@@ -29,9 +31,9 @@ class Request:
         try:
             data = json.loads(self.body.decode("utf-8"))
         except (UnicodeDecodeError, ValueError) as error:
-            raise InvalidInput("요청 형식이 올바르지 않아요.") from error
+            raise InvalidInput(_("요청 형식이 올바르지 않아요.")) from error
         if not isinstance(data, dict):
-            raise InvalidInput("요청 형식이 올바르지 않아요.")
+            raise InvalidInput(_("요청 형식이 올바르지 않아요."))
         return data
 
 
@@ -48,8 +50,9 @@ class Response:
         return cls(status, json.dumps(data, ensure_ascii=False).encode("utf-8"))
 
     @classmethod
-    def error(cls, error: ReaderError) -> "Response":
-        return cls.json({"error": {"code": error.code, "message": str(error)}}, error.status)
+    def error(cls, error: ReaderError, lang: str = "ko") -> "Response":
+        message = translate(error.args[0], lang) if error.args else ""
+        return cls.json({"error": {"code": error.code, "message": message}}, error.status)
 
     @classmethod
     def send_file(cls, path: Path, content_type: str, headers: dict[str, str] | None = None) -> "Response":
@@ -78,6 +81,6 @@ class Router:
                     return handler, found.groupdict()
                 allowed = True
         if allowed:
-            raise MethodNotAllowed("허용되지 않은 요청이에요.")
-        raise NotFound("없는 주소예요.")
+            raise MethodNotAllowed(_("허용되지 않은 요청이에요."))
+        raise NotFound(_("없는 주소예요."))
 

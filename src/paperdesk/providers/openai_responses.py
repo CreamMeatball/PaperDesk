@@ -5,6 +5,7 @@ from __future__ import annotations
 from ..domain.errors import ProviderFailed
 from ..domain.models import Prompt
 from ..ports.ai import HttpClient
+from ..i18n import _
 
 USAGE_LIMIT_CODES = {"subscription_sharing_usage_limit_exceeded", "subscription_sharing_usage_unavailable"}
 MANAGE_USAGE_URL = "https://chatgpt.com/settings/usage"
@@ -42,7 +43,7 @@ class ResponsesClient:
             elif kind in ("response.failed", "response.incomplete", "error"):
                 raise ProviderFailed(self._failure(event))
         if not completed:
-            raise ProviderFailed("응답이 끝나기 전에 연결이 끊겼어요.")
+            raise ProviderFailed(_("응답이 끝나기 전에 연결이 끊겼어요."))
         return "".join(parts)
 
     @staticmethod
@@ -57,8 +58,8 @@ class ResponsesClient:
         error = (event.get("response") or {}).get("error") or event.get("error") or {}
         code = error.get("code", "") if isinstance(error, dict) else ""
         if code in USAGE_LIMIT_CODES:
-            return f"ChatGPT 요금제 사용 한도에 도달했어요. 사용량 관리: {MANAGE_USAGE_URL}"
+            return _("ChatGPT 요금제 사용 한도에 도달했어요. 사용량 관리: {url}", url=MANAGE_USAGE_URL)
         message = error.get("message", "") if isinstance(error, dict) else str(error)
         reason = ((event.get("response") or {}).get("incomplete_details") or {}).get("reason", "")
-        return f"OpenAI 응답 실패 {code or reason}: {message}".strip()
+        return _("OpenAI 응답 실패 {code}: {message}", code=code or reason, message=message)
 

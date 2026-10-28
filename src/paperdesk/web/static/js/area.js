@@ -1,4 +1,5 @@
 import { h, icon, iconButton, toast } from "./ui.js";
+import { t } from "./i18n.js";
 
 // Rectangle selection: drag over a page, then explain (as an image), translate the text inside, highlight, note or ask.
 export class AreaSelect {
@@ -6,7 +7,7 @@ export class AreaSelect {
     this.reader = reader;
     this.active = false;
     var self = this;
-    this.button = iconButton("crop", "영역 선택 (드래그해 그림·표·수식을 묻기)", function () { self.active ? self.exit() : self.enter(); });
+    this.button = iconButton("crop", t("영역 선택 (드래그해 그림·표·수식을 묻기)"), function () { self.active ? self.exit() : self.enter(); });
     this.onDown = this.onDown.bind(this);
     reader.pagesEl.addEventListener("mousedown", this.onDown);
   }
@@ -17,7 +18,7 @@ export class AreaSelect {
     this.active = true;
     this.reader.readerEl.classList.add("area-mode");
     this.button.classList.add("on");
-    toast("PDF 위에서 드래그해 영역을 고르세요. Esc로 끝내요.");
+    toast(t("PDF 위에서 드래그해 영역을 고르세요. Esc로 끝내요."));
   }
 
   exit() {
@@ -74,22 +75,22 @@ export class AreaSelect {
 
   showMenu(page, rect, anchor) {
     var reader = this.reader, app = reader.app, self = this, text = this.textIn(page, rect);
-    var info = { text: text || "(글자 없음)", page: page, rects: [rect], rect: anchor };
+    var info = { text: text || t("(글자 없음)"), page: page, rects: [rect], rect: anchor };
     function act(fn) { return function () { self.removeMenu(); fn(); }; }
     this.menu = h("div", { class: "selection-menu", role: "toolbar" },
       h("button", { onclick: act(async function () {
         var image = await reader.cropImage(page, rect, 1600);
         app.assistant.runVisual({ task: "region", text: text, context: reader.pageText(page).slice(0, 4000), images: [image], thumb: image,
-          label: "선택 영역", page: page });
-      }) }, icon("sparkle"), "설명"),
-      text ? h("button", { onclick: act(function () { app.assistant.runOnSelection("translate", info); }) }, icon("translate"), "번역") : null,
+          label: t("선택 영역"), page: page });
+      }) }, icon("sparkle"), t("설명")),
+      text ? h("button", { onclick: act(function () { app.assistant.runOnSelection("translate", info); }) }, icon("translate"), t("번역")) : null,
       h("button", { onclick: act(async function () {
         var image = await reader.cropImage(page, rect, 1600);
-        app.assistant.quote(Object.assign({}, info, { text: text || "선택 영역", image: image }));
-      }) }, icon("question"), "질문"),
-      h("button", { onclick: act(function () { reader.annotations.create(info, "highlight"); }) }, icon("highlighter"), "표시"),
-      h("button", { onclick: act(function () { reader.annotations.createNote(info); }) }, icon("note"), "메모"),
-      text ? h("button", { title: "영역 글자 복사", onclick: act(function () { navigator.clipboard.writeText(text); toast("복사했어요"); }) }, icon("copy")) : null);
+        app.assistant.quote(Object.assign({}, info, { text: text || t("선택 영역"), image: image }));
+      }) }, icon("question"), t("질문")),
+      h("button", { onclick: act(function () { reader.annotations.create(info, "highlight"); }) }, icon("highlighter"), t("표시")),
+      h("button", { onclick: act(function () { reader.annotations.createNote(info); }) }, icon("note"), t("메모")),
+      text ? h("button", { title: t("영역 글자 복사"), onclick: act(function () { navigator.clipboard.writeText(text); toast(t("복사했어요")); }) }, icon("copy")) : null);
     this.menu.addEventListener("mousedown", function (e) { e.preventDefault(); e.stopPropagation(); });
     document.body.append(this.menu);
     reader.placeMenu(this.menu, anchor);

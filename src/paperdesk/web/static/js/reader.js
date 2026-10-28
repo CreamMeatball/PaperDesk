@@ -8,6 +8,7 @@ import { Annotations, COLORS } from "./annotations.js";
 import { FindBar } from "./find.js";
 import { Navigator } from "./navigator.js";
 import { AreaSelect } from "./area.js";
+import { t } from "./i18n.js";
 
 var pdfjsPromise = null;
 export function loadPdfjs() {
@@ -73,13 +74,13 @@ export class ReaderView {
   render() {
     var self = this, app = this.app;
     var doc = app.store.document(this.id);
-    this.pageInput = h("input", { class: "page-input", value: "1", "aria-label": "쪽",
+    this.pageInput = h("input", { class: "page-input", value: "1", "aria-label": t("쪽"),
       onkeydown: function (event) { if (event.key === "Enter") self.goToPage(parseInt(self.pageInput.value, 10)); } });
     this.totalLabel = h("span", { class: "sub" }, "/ —");
     this.zoomLabel = h("span", { class: "zoom-label" }, "100%");
-    this.titleEl = h("h1", { title: "더블클릭해 이름 바꾸기", ondblclick: function () { var d = app.store.document(self.id); if (d) app.renameDocument(d); } },
-      doc ? doc.title : "불러오는 중…");
-    this.pagesEl = h("div", { class: "pages", tabindex: "-1" }, h("div", { class: "loading" }, "PDF를 여는 중…"));
+    this.titleEl = h("h1", { title: t("더블클릭해 이름 바꾸기"), ondblclick: function () { var d = app.store.document(self.id); if (d) app.renameDocument(d); } },
+      doc ? doc.title : t("불러오는 중…"));
+    this.pagesEl = h("div", { class: "pages", tabindex: "-1" }, h("div", { class: "loading" }, t("PDF를 여는 중…")));
     this.bodyEl = h("div", { class: "reader-body" }, this.pagesEl);
     this.readerEl = h("div", { class: "reader" });
 
@@ -92,8 +93,8 @@ export class ReaderView {
     this.area = new AreaSelect(this);
 
     var toolbar = h("div", { class: "toolbar" },
-      app.sidebarHidden() ? iconButton("sidebar", "사이드바 보이기", function () { app.toggleSidebar(); }) : null,
-      iconButton("back", "서재로", function () { app.backToLibrary(); }),
+      app.sidebarHidden() ? iconButton("sidebar", t("사이드바 보이기"), function () { app.toggleSidebar(); }) : null,
+      iconButton("back", t("서재로"), function () { app.backToLibrary(); }),
       this.nav.button,
       this.titleEl,
       h("span", { class: "spacer" }),
@@ -101,12 +102,12 @@ export class ReaderView {
       h("span", { class: "tb-sep" }),
       this.pageInput, this.totalLabel,
       h("span", { class: "tb-sep" }),
-      iconButton("minus", "축소", function () { self.setZoom(self.zoom / 1.15); }),
+      iconButton("minus", t("축소"), function () { self.setZoom(self.zoom / 1.15); }),
       this.zoomLabel,
-      iconButton("plus", "확대", function () { self.setZoom(self.zoom * 1.15); }),
-      iconButton("fit", "창에 맞추기", function () { self.setZoom(1); }),
+      iconButton("plus", t("확대"), function () { self.setZoom(self.zoom * 1.15); }),
+      iconButton("fit", t("창에 맞추기"), function () { self.setZoom(1); }),
       h("span", { class: "tb-sep" }),
-      iconButton("panel", "AI 도우미 (" + MOD + "J)", function () { app.toggleAssistant(); }));
+      iconButton("panel", t("AI 도우미 ({key})", { key: MOD + "J" }), function () { app.toggleAssistant(); }));
     this.pagesEl.addEventListener("scroll", function () { self.onScroll(); }, { passive: true });
     this.readerEl.replaceChildren(toolbar, this.bodyEl);
     this.root.replaceChildren(this.readerEl);
@@ -140,8 +141,8 @@ export class ReaderView {
       this.extractText();
     } catch (error) {
       if (!this.alive) return;
-      this.pagesEl.replaceChildren(h("div", { class: "loading" }, "PDF를 열지 못했어요: " + (error.message || error)));
-      if (error.status === 404) { toast("논문을 찾지 못했어요.", true); app.backToLibrary(); }
+      this.pagesEl.replaceChildren(h("div", { class: "loading" }, t("PDF를 열지 못했어요: {error}", { error: error.message || error })));
+      if (error.status === 404) { toast(t("논문을 찾지 못했어요."), true); app.backToLibrary(); }
     }
   }
 
@@ -451,7 +452,7 @@ export class ReaderView {
     else if (action === "highlight") this.annotations.create(info, "highlight", color);
     else if (action === "note") this.annotations.createNote(info);
     else if (action === "reading") app.addToReadingList(info.text, this.id);
-    else if (action === "copy") { navigator.clipboard.writeText(info.text); toast("복사했어요"); }
+    else if (action === "copy") { navigator.clipboard.writeText(info.text); toast(t("복사했어요")); }
     if (action !== "ask") window.getSelection().removeAllRanges();
   }
 
@@ -460,22 +461,22 @@ export class ReaderView {
     this.hideMenu();
     this.selection = info;
     function item(action, iconName, label, key) {
-      return h("button", { title: label + (key ? " (" + key + ")" : ""), onclick: function () { self.runSelection(action, info); } },
-        icon(iconName), label, key ? h("kbd", null, key) : null);
+      return h("button", { title: t(label) + (key ? " (" + key + ")" : ""), onclick: function () { self.runSelection(action, info); } },
+        icon(iconName), t(label), key ? h("kbd", null, key) : null);
     }
     var swatches = h("span", { class: "swatches" }, COLORS.map(function (color) {
-      return h("button", { class: "swatch " + color, title: "하이라이트", "aria-label": "하이라이트 " + color,
+      return h("button", { class: "swatch " + color, title: t("하이라이트"), "aria-label": t("하이라이트") + " " + color,
         onclick: function () { self.runSelection("highlight", info, color); } });
     }));
     this.menu = h("div", { class: "selection-menu", role: "toolbar" },
-      item("translate", "translate", "번역", "T"), item("explain", "sparkle", "설명", "E"), item("define", "book", "뜻", "W"),
-      item("ask", "question", "질문", "Q"),
+      item("translate", "translate", t("번역"), "T"), item("explain", "sparkle", t("설명"), "E"), item("define", "book", t("뜻"), "W"),
+      item("ask", "question", t("질문"), "Q"),
       h("span", { class: "menu-sep" }),
-      h("span", { class: "hl-group", title: "하이라이트 (H)" }, icon("highlighter"), swatches),
-      item("note", "note", "메모", "C"),
+      h("span", { class: "hl-group", title: t("하이라이트 (H)") }, icon("highlighter"), swatches),
+      item("note", "note", t("메모"), "C"),
       h("span", { class: "menu-sep" }),
-      h("button", { title: "선택한 참고문헌을 읽어볼 논문에 추가", onclick: function () { self.runSelection("reading", info); } }, icon("bookmark")),
-      h("button", { title: "복사", onclick: function () { self.runSelection("copy", info); } }, icon("copy")));
+      h("button", { title: t("선택한 참고문헌을 읽어볼 논문에 추가"), onclick: function () { self.runSelection("reading", info); } }, icon("bookmark")),
+      h("button", { title: t("복사"), onclick: function () { self.runSelection("copy", info); } }, icon("copy")));
     this.menu.addEventListener("mousedown", function (event) { event.preventDefault(); });
     document.body.append(this.menu);
     this.placeMenu(this.menu, info.rect);

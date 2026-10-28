@@ -182,7 +182,7 @@ html { overflow: hidden; }
 .empty-state .art { width: 54px; height: 54px; margin: 0 auto; border-radius: 14px; display: grid; place-items: center; background: var(--hover); color: var(--text-2); }
 .empty-state .art svg.i { width: 26px; height: 26px; }
 .dropzone::after {
-  content: "여기에 PDF를 놓으면 이 폴더에 추가돼요"; position: absolute; inset: 10px; border: 2px dashed var(--accent);
+  content: attr(data-drop); position: absolute; inset: 10px; border: 2px dashed var(--accent);
   border-radius: 12px; display: grid; place-items: center; font-size: 14px; font-weight: 600; color: var(--accent);
   background: var(--accent-soft); pointer-events: none;
 }

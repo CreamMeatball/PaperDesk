@@ -1,3 +1,4 @@
+import { t } from "./i18n.js";
 // Client-side model of the library: folders + documents, with tree helpers. Views listen for "change".
 
 function normalize(text) { return String(text || "").replace(/\u00ad/g, "").replace(/\s+/g, " ").trim(); }

@@ -1,3 +1,4 @@
+import { t } from "./i18n.js";
 // History-API router. Routes: /library?folder=ID|all|recent|unfiled&q=..., /reader?id=..., /settings
 export class Router extends EventTarget {
   constructor() {

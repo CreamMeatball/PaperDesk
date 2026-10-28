@@ -9,6 +9,7 @@ from ..ports.ai import AIProvider, CommandRunner, HttpClient, ProviderContext
 from ..ports.secrets import SecretStore
 from ..ports.settings import Settings, SettingsStore
 from ..providers.registry import ProviderRegistry
+from ..i18n import SUPPORTED, _
 
 
 class SettingsService:
@@ -43,20 +44,26 @@ class SettingsService:
         return {
             "provider": settings.provider,
             "target_language": settings.target_language,
+            "ui_language": settings.ui_language,
             "languages": sorted(set(LANGUAGES.values())),
             "providers": [self._registry.create(pid, self.context_for(pid, settings)).describe() for pid in self._registry.ids()],
         }
 
-    def update_general(self, *, provider: str | None = None, target_language: str | None = None) -> Settings:
+    def update_general(self, *, provider: str | None = None, target_language: str | None = None,
+                       ui_language: str | None = None) -> Settings:
         settings = self._store.load()
         if provider is not None:
             if provider and not self._registry.has(provider):
-                raise InvalidInput(f"알 수 없는 AI 연결: {provider}")
+                raise InvalidInput(_("알 수 없는 AI 연결: {id}", id=provider))
             settings.provider = provider
+        if ui_language is not None:
+            if ui_language != "system" and ui_language not in SUPPORTED:
+                raise InvalidInput(_("지원하지 않는 화면 언어예요."))
+            settings.ui_language = ui_language
         if target_language is not None:
             language = " ".join(str(target_language).split())
             if not language or len(language) > 40:
-                raise InvalidInput("번역 언어를 확인해 주세요.")
+                raise InvalidInput(_("번역 언어를 확인해 주세요."))
             settings.target_language = language
         self._store.save(settings)
         return settings
@@ -70,10 +77,10 @@ class SettingsService:
         context = self.context_for(provider_id, settings)
         for key, raw in values.items():
             if key not in fields:
-                raise InvalidInput(f"알 수 없는 설정 항목: {key}")
+                raise InvalidInput(_("알 수 없는 설정 항목: {key}", key=key))
             value = "" if raw is None else str(raw).strip()
             if len(value) > 4000:
-                raise InvalidInput("값이 너무 길어요.")
+                raise InvalidInput(_("값이 너무 길어요."))
             if fields[key].kind == "secret":
                 if value:
                     self._secrets.set(context.secret_name(key), value)
@@ -96,4 +103,3 @@ class SettingsService:
         completion = provider.complete(Prompt("Reply with text only. Do not use tools.", "Reply with exactly: OK"))
         return {"ok": True, "message": completion.text.strip()[:200], "model": completion.model,
                 "seconds": round(time.monotonic() - started, 1)}
-

@@ -7,6 +7,7 @@ from ..domain.errors import ProviderFailed
 from ..domain.models import Prompt
 from ..ports.ai import CommandResult, OptionField
 from .cli import CliProvider, binary_option
+from ..i18n import _
 
 
 class ClaudeCodeProvider(CliProvider):
@@ -19,13 +20,13 @@ class ClaudeCodeProvider(CliProvider):
 
     id = "claude-code"
     label = "Claude Code"
-    description = "내 컴퓨터에 설치·로그인된 Claude Code(claude -p)를 도구 없이 실행합니다. 사용량은 본인 Claude 로그인(요금제 또는 API 키)에 집계됩니다."
+    description = _("내 컴퓨터에 설치·로그인된 Claude Code(claude -p)를 도구 없이 실행합니다. 사용량은 본인 Claude 로그인(요금제 또는 API 키)에 집계됩니다.")
     docs_url = "https://code.claude.com/docs/en/legal-and-compliance"
     executable = "claude"
     extra_dirs = ("~/.claude/local",)
     login_args = ("auth", "status")
     options = (
-        OptionField("model", "모델", placeholder="비워 두면 Claude Code 기본 모델"),
+        OptionField("model", _("모델"), placeholder=_("비워 두면 Claude Code 기본 모델")),
         binary_option("claude"),
     )
 
@@ -35,15 +36,15 @@ class ClaudeCodeProvider(CliProvider):
         except ValueError:
             data = {}
         if data.get("loggedIn"):
-            return True, f"로그인됨 ({data.get('authMethod', '')})"
-        return False, "Claude Code에 로그인되어 있지 않아요. 터미널에서 'claude'를 실행해 /login 하세요."
+            return True, _("로그인됨 ({method})", method=data.get('authMethod', ''))
+        return False, _("Claude Code에 로그인되어 있지 않아요. 터미널에서 'claude'를 실행해 /login 하세요.")
 
     def failure_message(self, result: CommandResult) -> str:
         try:
             data = json.loads(result.stdout)
         except ValueError:
             return super().failure_message(result)
-        return f"Claude Code 오류: {data.get('result') or data.get('subtype') or result.returncode}"
+        return _("Claude Code 오류: {detail}", detail=data.get('result') or data.get('subtype') or result.returncode)
 
     def build_command(self, path: str, prompt: Prompt, workdir: Path) -> list[str]:
         argv = [
@@ -66,6 +67,6 @@ class ClaudeCodeProvider(CliProvider):
         except ValueError:
             return result.stdout
         if data.get("is_error"):
-            raise ProviderFailed(f"Claude Code 오류: {data.get('result') or data.get('subtype')}")
+            raise ProviderFailed(_("Claude Code 오류: {detail}", detail=data.get('result') or data.get('subtype')))
         return str(data.get("result") or "")
 

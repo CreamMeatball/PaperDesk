@@ -1,5 +1,6 @@
 import { h, icon, iconButton, menuAt, MOD } from "./ui.js";
 import { FOLDER_TYPE, makeDropTarget } from "./dnd.js";
+import { t } from "./i18n.js";
 
 var THEME_ICONS = { system: "monitor", dark: "moon", light: "sun" };
 var THEME_NEXT = { system: "dark", dark: "light", light: "system" };
@@ -15,8 +16,8 @@ export class Sidebar {
   render() {
     var app = this.app, route = app.router.route, self = this;
     var input = h("input", {
-      type: "search", placeholder: "논문 검색", value: route.name === "library" ? route.query : this.searchValue,
-      "aria-label": "논문 검색",
+      type: "search", placeholder: t("논문 검색"), value: route.name === "library" ? route.query : this.searchValue,
+      "aria-label": t("논문 검색"),
       onkeydown: function (event) {
         if (event.key === "Enter" && !event.isComposing) app.search(input.value.trim());
         if (event.key === "Escape") { input.value = ""; app.search(""); input.blur(); }
@@ -26,13 +27,13 @@ export class Sidebar {
     this.searchInput = input;
 
     var nav = h("div", null,
-      this.navItem("books", "모든 논문", app.store.documents.length, route.name === "library" && route.scope === "all" && !route.query,
+      this.navItem("books", t("모든 논문"), app.store.documents.length, route.name === "library" && route.scope === "all" && !route.query,
         function () { app.router.go("/library"); }, null, "all"),
-      this.navItem("clock", "최근에 연 논문", null, route.name === "library" && route.scope === "recent",
+      this.navItem("clock", t("최근에 연 논문"), null, route.name === "library" && route.scope === "recent",
         function () { app.router.go("/library?folder=recent"); }),
-      this.navItem("bookmark", "읽어볼 논문", app.store.readingList.filter(function (i) { return !i.in_library; }).length || null,
+      this.navItem("bookmark", t("읽어볼 논문"), app.store.readingList.filter(function (i) { return !i.in_library; }).length || null,
         route.name === "library" && route.scope === "reading", function () { app.router.go("/library?folder=reading"); }),
-      this.navItem("inbox", "분류 안 됨", app.store.documentsIn("unfiled").length, route.name === "library" && route.scope === "unfiled",
+      this.navItem("inbox", t("분류 안 됨"), app.store.documentsIn("unfiled").length, route.name === "library" && route.scope === "unfiled",
         function () { app.router.go("/library?folder=unfiled"); }, null, "unfiled"));
 
     var tree = h("div", { role: "tree" });
@@ -42,19 +43,19 @@ export class Sidebar {
     this.root.replaceChildren(
       h("div", { class: "sb-head" },
         h("div", { class: "brand" }, h("span", { class: "brand-mark" }, "P"), "Paperdesk"),
-        iconButton("upload", "PDF 가져오기 (" + MOD + "O)", function () { app.pickFiles(app.currentFolder()); }),
-        iconButton("sidebar", "사이드바 숨기기 (" + MOD + "\\)", function () { app.toggleSidebar(); })),
+        iconButton("upload", t("PDF 가져오기 ({key})", { key: MOD + "O" }), function () { app.pickFiles(app.currentFolder()); }),
+        iconButton("sidebar", t("사이드바 숨기기 ({key})", { key: MOD + "\\" }), function () { app.toggleSidebar(); })),
       h("label", { class: "search" }, icon("search", 14), input, h("kbd", null, MOD + "K")),
       h("div", { class: "sb-scroll" },
         nav,
-        h("div", { class: "sb-label" }, "폴더",
-          iconButton("folderPlus", "새 폴더", function () { app.newFolder(null); })),
+        h("div", { class: "sb-label" }, t("폴더"),
+          iconButton("folderPlus", t("새 폴더"), function () { app.newFolder(null); })),
         tree,
-        app.store.folders.length ? null : h("div", { style: "padding:4px 8px;color:var(--text-3);font-size:12px" }, "주제별 폴더를 만들어 논문을 정리하세요.")),
+        app.store.folders.length ? null : h("div", { style: "padding:4px 8px;color:var(--text-3);font-size:12px" }, t("주제별 폴더를 만들어 논문을 정리하세요."))),
       h("div", { class: "sb-foot" },
         h("button", { class: "nav-item" + (route.name === "settings" ? " active" : ""), onclick: function () { app.router.go("/settings"); } },
-          icon("settings"), h("span", { class: "label" }, "설정")),
-        iconButton(THEME_ICONS[themeChoice], "테마: " + THEME_LABEL[themeChoice], function () {
+          icon("settings"), h("span", { class: "label" }, t("설정"))),
+        iconButton(THEME_ICONS[themeChoice], t("테마: {name}", { name: t(THEME_LABEL[themeChoice]) }), function () {
           window.paperdeskTheme.set(THEME_NEXT[themeChoice]);
           self.render();
           app.themeChanged();
@@ -89,7 +90,7 @@ export class Sidebar {
           event.dataTransfer.effectAllowed = "move";
         }
       }, twisty, icon("folder"), h("span", { class: "label" }, folder.name), h("span", { class: "count" }, store.countIn(folder.id) || ""),
-        h("span", { class: "more icon-btn", style: "width:20px;height:20px", title: "폴더 메뉴",
+        h("span", { class: "more icon-btn", style: "width:20px;height:20px", title: t("폴더 메뉴"),
           onclick: function (event) { event.stopPropagation(); menuAt(event.currentTarget, self.folderMenu(folder)); } }, icon("more", 14)));
       makeDropTarget(row, app, folder.id);
       container.append(row);
@@ -100,12 +101,12 @@ export class Sidebar {
   folderMenu(folder) {
     var app = this.app;
     return [
-      { label: "하위 폴더 만들기", icon: "folderPlus", onClick: function () { app.newFolder(folder.id); } },
-      { label: "이 폴더로 PDF 가져오기", icon: "upload", onClick: function () { app.pickFiles(folder.id); } },
-      { label: "이름 바꾸기", icon: "pencil", onClick: function () { app.renameFolder(folder); } },
-      { label: "다른 폴더로 옮기기", icon: "move", onClick: function () { app.chooseFolderFor({ folder: folder }); } },
+      { label: t("하위 폴더 만들기"), icon: "folderPlus", onClick: function () { app.newFolder(folder.id); } },
+      { label: t("이 폴더로 PDF 가져오기"), icon: "upload", onClick: function () { app.pickFiles(folder.id); } },
+      { label: t("이름 바꾸기"), icon: "pencil", onClick: function () { app.renameFolder(folder); } },
+      { label: t("다른 폴더로 옮기기"), icon: "move", onClick: function () { app.chooseFolderFor({ folder: folder }); } },
       "-",
-      { label: "폴더 삭제", icon: "trash", danger: true, onClick: function () { app.deleteFolder(folder); } }
+      { label: t("폴더 삭제"), icon: "trash", danger: true, onClick: function () { app.deleteFolder(folder); } }
     ];
   }
 }

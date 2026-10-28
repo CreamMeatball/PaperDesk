@@ -1,3 +1,4 @@
+import { t } from "./i18n.js";
 // Drag-and-drop contract shared by the sidebar and the library table.
 export var DOC_TYPE = "application/x-paperdesk-doc";
 export var FOLDER_TYPE = "application/x-paperdesk-folder";

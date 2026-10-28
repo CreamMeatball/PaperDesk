@@ -9,6 +9,7 @@ from ..domain.errors import InvalidInput, NotFound
 from ..domain.models import Document, Folder, utcnow
 from ..ports.repositories import DocumentRepository, FolderRepository, PageTextRepository
 from ..ports.storage import BlobStore
+from ..i18n import _
 
 MAX_PDF_BYTES = 200 * 1024 * 1024
 MAX_NAME = 120
@@ -18,13 +19,21 @@ def _new_id() -> str:
     return uuid.uuid4().hex
 
 
-def _clean_name(value: str, what: str) -> str:
+def _clean_name(value: str, empty: str, too_long: str) -> str:
     name = " ".join(str(value or "").split())
     if not name:
-        raise InvalidInput(f"{what} 이름을 입력하세요.")
+        raise InvalidInput(empty)
     if len(name) > MAX_NAME:
-        raise InvalidInput(f"{what} 이름은 {MAX_NAME}자 이하로 해 주세요.")
+        raise InvalidInput(too_long)
     return name
+
+
+def _folder_name(value: str) -> str:
+    return _clean_name(value, _("폴더 이름을 입력하세요."), _("폴더 이름은 {n}자 이하로 해 주세요.", n=MAX_NAME))
+
+
+def _paper_title(value: str) -> str:
+    return _clean_name(value, _("논문 제목을 입력하세요."), _("논문 제목은 {n}자 이하로 해 주세요.", n=MAX_NAME))
 
 
 class FolderService:
@@ -43,7 +52,7 @@ class FolderService:
     def get(self, folder_id: str) -> Folder:
         folder = self._folders.get(folder_id)
         if folder is None:
-            raise NotFound("폴더를 찾지 못했어요.")
+            raise NotFound(_("폴더를 찾지 못했어요."))
         return folder
 
     def require_optional(self, folder_id: str | None) -> str | None:
@@ -53,7 +62,7 @@ class FolderService:
 
     def create(self, name: str, parent_id: str | None = None) -> Folder:
         parent = self.require_optional(parent_id)
-        clean = _clean_name(name, "폴더")
+        clean = _folder_name(name)
         self._ensure_unique(clean, parent, ignore=None)
         folder = Folder(self._new_id(), clean, parent, self._clock())
         self._folders.add(folder)
@@ -61,7 +70,7 @@ class FolderService:
 
     def rename(self, folder_id: str, name: str) -> Folder:
         folder = self.get(folder_id)
-        clean = _clean_name(name, "폴더")
+        clean = _folder_name(name)
         self._ensure_unique(clean, folder.parent_id, ignore=folder.id)
         updated = Folder(folder.id, clean, folder.parent_id, folder.created_at)
         self._folders.update(updated)
@@ -71,7 +80,7 @@ class FolderService:
         folder = self.get(folder_id)
         parent = self.require_optional(parent_id)
         if parent is not None and (parent == folder.id or parent in self.descendants(folder.id)):
-            raise InvalidInput("폴더를 자기 자신이나 하위 폴더 안으로 옮길 수 없어요.")
+            raise InvalidInput(_("폴더를 자기 자신이나 하위 폴더 안으로 옮길 수 없어요."))
         self._ensure_unique(folder.name, parent, ignore=folder.id)
         updated = Folder(folder.id, folder.name, parent, folder.created_at)
         self._folders.update(updated)
@@ -104,7 +113,7 @@ class FolderService:
 
     def _ensure_unique(self, name: str, parent_id: str | None, *, ignore: str | None) -> None:
         if self._taken(name, parent_id, ignore):
-            raise InvalidInput(f"같은 위치에 '{name}' 폴더가 이미 있어요.")
+            raise InvalidInput(_("같은 위치에 '{name}' 폴더가 이미 있어요.", name=name))
 
     def _taken(self, name: str, parent_id: str | None, ignore: str | None) -> bool:
         return any(item.parent_id == parent_id and item.id != ignore and item.name.casefold() == name.casefold()
@@ -145,22 +154,22 @@ class LibraryService:
     def get(self, doc_id: str) -> Document:
         document = self._documents.get(doc_id)
         if document is None:
-            raise NotFound("논문을 찾지 못했어요.")
+            raise NotFound(_("논문을 찾지 못했어요."))
         return document
 
     def import_pdf(self, filename: str, data: bytes, folder_id: str | None = None) -> tuple[Document, bool]:
         """Return (document, created). Re-importing the same file returns the existing entry."""
         if not data.startswith(b"%PDF-"):
-            raise InvalidInput("PDF 파일만 올릴 수 있어요.")
+            raise InvalidInput(_("PDF 파일만 올릴 수 있어요."))
         if len(data) > MAX_PDF_BYTES:
-            raise InvalidInput("PDF가 너무 커요 (최대 200MB).")
+            raise InvalidInput(_("PDF가 너무 커요 (최대 200MB)."))
         folder = self._folders.require_optional(folder_id)
         digest = hashlib.sha256(data).hexdigest()
         existing = self._documents.find_by_sha256(digest)
         if existing is not None:
             return existing, False
         name = Path(filename or "paper.pdf").name[:200] or "paper.pdf"
-        title = Path(name).stem.replace("_", " ").strip() or "제목 없음"
+        title = Path(name).stem.replace("_", " ").strip() or "Untitled"
         document = Document(self._new_id(), title[:MAX_NAME], name, digest, len(data), self._clock(), folder_id=folder)
         self._blobs.put(self.blob_key(document.id), data)
         self._documents.add(document)
@@ -176,7 +185,7 @@ class LibraryService:
         return document
 
     def rename(self, doc_id: str, title: str) -> Document:
-        document = self.get(doc_id).renamed(_clean_name(title, "논문"))
+        document = self.get(doc_id).renamed(_paper_title(title))
         self._documents.update(document)
         return document
 
@@ -192,7 +201,7 @@ class LibraryService:
 
     def save_text(self, doc_id: str, pages: list[str]) -> Document:
         if len(pages) > 5000 or any(not isinstance(page, str) for page in pages):
-            raise InvalidInput("쪽 텍스트 형식이 올바르지 않아요.")
+            raise InvalidInput(_("쪽 텍스트 형식이 올바르지 않아요."))
         document = self.get(doc_id)
         self._texts.replace(doc_id, [page[:200_000] for page in pages])
         updated = document.with_text(len(pages))
@@ -208,4 +217,3 @@ class LibraryService:
         titles = {doc.id: doc.title for doc in self._documents.list()}
         return [{"doc_id": doc_id, "title": titles.get(doc_id, ""), "page": page, "snippet": snippet}
                 for doc_id, page, snippet in self._texts.search(query, limit)]
-

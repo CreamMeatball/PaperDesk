@@ -11,6 +11,7 @@ from .codex_cli import CodexCliProvider
 from .demo import DemoProvider
 from .openai_api import OpenAIApiProvider
 from .openai_compatible import OllamaProvider, OpenAICompatibleServerProvider
+from ..i18n import _
 
 
 class ProviderRegistry:
@@ -37,7 +38,7 @@ class ProviderRegistry:
         try:
             return self._classes[provider_id]
         except KeyError:
-            raise NotFound(f"알 수 없는 AI 연결: {provider_id}") from None
+            raise NotFound(_("알 수 없는 AI 연결: {id}", id=provider_id)) from None
 
     def create(self, provider_id: str, context: ProviderContext) -> AIProvider:
         return self.get_class(provider_id)(context)

@@ -1,3 +1,4 @@
+import { t } from "./i18n.js";
 // Maps the rendered pdf.js text layer of one page to strings and back to on-screen rectangles.
 // compact = text without whitespace (stable between analysis text and the DOM); spaced = text with single spaces (for regexes).
 

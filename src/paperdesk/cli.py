@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import json
 import logging
 import shutil
@@ -11,6 +12,7 @@ from pathlib import Path
 
 from . import APP_ID, APP_NAME, __version__
 from .app import Application
+from .i18n import from_header, translate
 
 DEFAULT_PORT = 47615
 
@@ -42,7 +44,7 @@ def command_open(args: argparse.Namespace) -> int:
     try:
         shell.run(server.url)
         if not shell.blocks:
-            print("종료하려면 Ctrl+C", flush=True)
+            print("Press Ctrl+C to quit", flush=True)
             thread.join()
     except KeyboardInterrupt:
         pass
@@ -92,6 +94,7 @@ def command_doctor(args: argparse.Namespace) -> int:
     from .desktop import NativeWindowShell
 
     app = Application.build()
+    lang = from_header(os.environ.get("LC_ALL") or os.environ.get("LANG") or "en")
     report = {
         "version": __version__,
         "python": sys.version.split()[0],
@@ -100,7 +103,7 @@ def command_doctor(args: argparse.Namespace) -> int:
         "data_dir": str(app.paths.root),
         "native_window": NativeWindowShell.is_available(),
         "active_provider": app.settings.load().provider or None,
-        "providers": {p["id"]: {"available": p["available"], "detail": p["detail"]} for p in app.settings.view()["providers"]},
+        "providers": {p["id"]: {"available": p["available"], "detail": translate(p["detail"], lang)} for p in app.settings.view()["providers"]},
     }
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
@@ -119,23 +122,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-v", "--verbose", action="store_true")
     sub = parser.add_subparsers(dest="command")
 
-    open_cmd = sub.add_parser("open", help="앱 창 열기 (기본)")
+    open_cmd = sub.add_parser("open", help="open the app window (default)")
     open_cmd.add_argument("--port", type=int, default=DEFAULT_PORT)
     open_cmd.add_argument("--shell", choices=("auto", "native", "browser"), default="auto")
     open_cmd.set_defaults(func=command_open)
 
-    serve = sub.add_parser("serve", help="창 없이 서버만 실행 (개발용)")
+    serve = sub.add_parser("serve", help="run the local server only (development)")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=DEFAULT_PORT)
     serve.set_defaults(func=command_serve)
 
-    sub.add_parser("mcp", help="Claude Desktop·Codex용 MCP 서버 (stdio)").set_defaults(func=command_mcp)
+    sub.add_parser("mcp", help="MCP server for Claude Desktop and Codex (stdio)").set_defaults(func=command_mcp)
 
-    config = sub.add_parser("mcp-config", help="MCP 연결 설정 예시 출력")
+    config = sub.add_parser("mcp-config", help="print MCP client configuration")
     config.add_argument("client", choices=("claude", "codex"))
     config.set_defaults(func=command_mcp_config)
 
-    doctor = sub.add_parser("doctor", help="설치·AI 연결 상태 점검")
+    doctor = sub.add_parser("doctor", help="check the installation and AI connections")
     doctor.add_argument("--json", action="store_true")
     doctor.set_defaults(func=command_doctor)
     return parser

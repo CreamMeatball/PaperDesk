@@ -1,3 +1,4 @@
+import { locale, t } from "./i18n.js";
 export class ApiError extends Error {
   constructor(message, status, code) {
     super(message);
@@ -9,7 +10,7 @@ export class ApiError extends Error {
 // Every request carries X-Paperdesk so the local server can reject requests from other websites.
 export class ApiClient {
   async request(method, path, body, headers) {
-    var options = { method: method, headers: Object.assign({ "X-Paperdesk": "1" }, headers || {}) };
+    var options = { method: method, headers: Object.assign({ "X-Paperdesk": "1", "X-Paperdesk-Lang": locale() }, headers || {}) };
     if (body !== undefined) {
       if (body instanceof Blob || body instanceof ArrayBuffer) {
         options.body = body;
@@ -22,13 +23,13 @@ export class ApiClient {
     try {
       response = await fetch(path, options);
     } catch (error) {
-      throw new ApiError("앱 서버에 연결하지 못했어요.", 0, "offline");
+      throw new ApiError(t("앱 서버에 연결하지 못했어요."), 0, "offline");
     }
     var data = null;
     try { data = await response.json(); } catch (error) { data = null; }
     if (!response.ok) {
       var detail = data && data.error ? data.error : {};
-      throw new ApiError(detail.message || "요청에 실패했어요 (" + response.status + ")", response.status, detail.code);
+      throw new ApiError(detail.message || t("요청에 실패했어요 ({status})", { status: response.status }), response.status, detail.code);
     }
     return data;
   }

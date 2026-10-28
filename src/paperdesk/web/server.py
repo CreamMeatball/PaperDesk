@@ -12,6 +12,7 @@ from ..app import Application
 from ..domain.errors import InvalidInput, NotFound, ReaderError
 from .api import MAX_UPLOAD, ApiController
 from .http import Request, Response, Router
+from ..i18n import _, from_header, translate
 
 STATIC_DIR = Path(__file__).with_name("static")
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "[::1]")
@@ -57,6 +58,8 @@ class RequestHandler(BaseHTTPRequestHandler):
 
     def _dispatch(self) -> None:
         url = urlsplit(self.path)
+        lang = from_header(self.headers.get("X-Paperdesk-Lang") or self.headers.get("Accept-Language"))
+        self._lang = lang
         try:
             self._check_host()
             if url.path.startswith("/api/"):
@@ -65,10 +68,10 @@ class RequestHandler(BaseHTTPRequestHandler):
                 response = self._static(url.path)
         except ReaderError as error:
             self._drain()
-            response = Response.error(error)
+            response = Response.error(error, lang)
         except Exception:  # keep the server alive; details go to the log only
             log.exception("unhandled error for %s %s", self.command, url.path)
-            response = Response.json({"error": {"code": "internal", "message": "예상하지 못한 오류가 났어요."}}, 500)
+            response = Response.json({"error": {"code": "internal", "message": translate(_("예상하지 못한 오류가 났어요."), lang)}}, 500)
         self._send(response)
 
     def _check_host(self) -> None:
@@ -76,14 +79,14 @@ class RequestHandler(BaseHTTPRequestHandler):
         host = self.headers.get("Host", "")
         name = host.rsplit(":", 1)[0] if not host.startswith("[") else host.split("]")[0] + "]"
         if name not in LOOPBACK_HOSTS:
-            raise Forbidden("허용되지 않은 주소예요.")
+            raise Forbidden(_("허용되지 않은 주소예요."))
 
     def _check_same_origin(self) -> None:
         site = self.headers.get("Sec-Fetch-Site")
         if site and site not in ("same-origin", "none"):
-            raise Forbidden("다른 사이트에서 온 요청은 받을 수 없어요.")
+            raise Forbidden(_("다른 사이트에서 온 요청은 받을 수 없어요."))
         if self.command != "GET" and self.headers.get(CLIENT_HEADER) != "1":
-            raise Forbidden("앱 화면에서 보낸 요청이 아니에요.")
+            raise Forbidden(_("앱 화면에서 보낸 요청이 아니에요."))
 
     def _drain(self) -> None:
         length = int(self.headers.get("Content-Length") or 0)
@@ -96,20 +99,20 @@ class RequestHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         if length > MAX_UPLOAD:
             self.close_connection = True
-            raise InvalidInput("파일이 너무 커요.")
+            raise InvalidInput(_("파일이 너무 커요."))
         body = self.rfile.read(length) if length else b""
         self._body_read = True
         handler, params = self.server.router.resolve(self.command, path)
-        return handler(Request(self.command, path, query, self.headers, body, params))
+        return handler(Request(self.command, path, query, self.headers, body, params, self._lang))
 
     def _static(self, path: str) -> Response:
         if self.command != "GET":
-            raise NotFound("없는 주소예요.")
+            raise NotFound(_("없는 주소예요."))
         if path in APP_ROUTES:
             path = "/index.html"
         target = (self.server.static_dir / path.lstrip("/")).resolve()
         if self.server.static_dir not in target.parents or not target.is_file():
-            raise NotFound("없는 파일이에요.")
+            raise NotFound(_("없는 파일이에요."))
         kind = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
         if target.suffix == ".mjs":
             kind = "text/javascript"

@@ -2,10 +2,13 @@ import { confirmDialog, h, icon, menuAt, toast } from "./ui.js";
 import { compact } from "./layout.js";
 import { renderInlineMath } from "./markdown.js";
 import { drawRects, rectContains } from "./textmap.js";
+import { t } from "./i18n.js";
 
 var BATCH_BLOCKS = 10, BATCH_CHARS = 5000;
 var MODES = [["side", "나란히"], ["over", "원문 위에"], ["off", "번역 숨기기"]];
-var XREF = /(그림|표|알고리즘|Figures?|Figs?\.|Tables?|Tabs?\.|Algorithms?|Alg\.)\s*(\d+|[A-Z]\.\d+)|(식|수식|Eqs?\.|Equations?)\s*\(?(\d+)\)?|\[(\d{1,4}(?:\s*[,–\-]\s*\d{1,4})*)\]/g;
+// Cross-reference words in every UI/answer language we ship (ko, en, ja, zh).
+var XREF = /(그림|표|알고리즘|アルゴリズム|算法|図|图|表|Figures?|Figs?\.|Tables?|Tabs?\.|Algorithms?|Alg\.)\s*(\d+|[A-Z]\.\d+)|(수식|식|数式|公式|方程|式|Eqs?\.|Equations?)\s*[\(（]?(\d+)[\)）]?|\[(\d{1,4}(?:\s*[,–\-]\s*\d{1,4})*)\]/g;
+var XREF_TABLE = /^(표|表|Tab)/i, XREF_ALGORITHM = /^(알고리즘|アルゴリズム|算法|Alg)/i;
 
 // Body translation: cards beside (or over) the PDF, sentence-to-sentence linking, magnifier per paragraph,
 // section and whole-paper translation through a queue.
@@ -21,8 +24,8 @@ export class TranslationController {
     this.total = 0;
     this.active = null;
     var self = this;
-    this.label = h("span", null, "번역");
-    this.button = h("button", { class: "btn tb-btn", title: "본문 번역", onclick: function (event) { self.openMenu(event.currentTarget); } },
+    this.label = h("span", null, t("번역"));
+    this.button = h("button", { class: "btn tb-btn", title: t("본문 번역"), onclick: function (event) { self.openMenu(event.currentTarget); } },
       icon("translate"), this.label, icon("chevronDown", 12));
     this.hover = h("div", { class: "block-hover" });
     this.hoverButton = h("button", { class: "block-btn", onmousedown: function (event) { event.preventDefault(); }, onclick: function (event) {
@@ -73,27 +76,27 @@ export class TranslationController {
   openMenu(anchor) {
     var self = this, reader = this.reader, ready = !!this.analysis;
     var all = ready ? this.analysis.blocks.filter(function (b) { return b.translatable && !self.store[b.key]; }) : [];
-    var items = [{ title: "번역 보기" }];
+    var items = [{ title: t("번역 보기") }];
     MODES.forEach(function (mode) {
-      items.push({ label: (reader.tmode === mode[0] ? "✓ " : "   ") + mode[1], onClick: function () { reader.setTranslationMode(mode[0]); } });
+      items.push({ label: (reader.tmode === mode[0] ? "✓ " : "   ") + t(mode[1]), onClick: function () { reader.setTranslationMode(mode[0]); } });
     });
     items.push("-");
-    if (!ready) items.push({ title: "문서를 분석하는 중이에요…" });
+    if (!ready) items.push({ title: t("문서를 분석하는 중이에요…") });
     else {
-      items.push({ label: "현재 쪽 번역", icon: "file", onClick: function () { self.translatePage(reader.current); } });
-      items.push({ label: "목차에서 골라 번역…", icon: "list", onClick: function () { reader.nav.open("sections"); } });
-      items.push({ label: all.length ? "남은 본문 전체 번역 (" + all.length + "문단)" : "전체 번역 완료", icon: "translate",
+      items.push({ label: t("현재 쪽 번역"), icon: "file", onClick: function () { self.translatePage(reader.current); } });
+      items.push({ label: t("목차에서 골라 번역…"), icon: "list", onClick: function () { reader.nav.open("sections"); } });
+      items.push({ label: all.length ? t("남은 본문 전체 번역 ({n}문단)", { n: all.length }) : t("전체 번역 완료"), icon: "translate",
         onClick: function () { if (all.length) self.translateAll(all); } });
-      if (this.running) items.push({ label: "번역 멈추기", icon: "close", onClick: function () { self.queue = []; toast("남은 번역을 취소했어요"); } });
+      if (this.running) items.push({ label: t("번역 멈추기"), icon: "close", onClick: function () { self.queue = []; toast(t("남은 번역을 취소했어요")); } });
     }
     menuAt(anchor, items);
   }
 
   updateLabel() {
-    if (this.running || this.queue.length) this.label.textContent = "번역 " + this.done + "/" + this.total;
+    if (this.running || this.queue.length) this.label.textContent = t("번역 {done}/{total}", { done: this.done, total: this.total });
     else {
       var count = Object.keys(this.store).length;
-      this.label.textContent = count ? "번역 " + count : "번역";
+      this.label.textContent = count ? t("번역 {n}", { n: count }) : t("번역");
     }
     this.button.classList.toggle("busy", this.running);
   }
@@ -101,7 +104,7 @@ export class TranslationController {
   // ---------- queue ----------
   translatePage(page) {
     var blocks = this.blocksOn(page);
-    if (!blocks.length) { toast("이 쪽에는 번역할 본문이 없어요."); return; }
+    if (!blocks.length) { toast(t("이 쪽에는 번역할 본문이 없어요.")); return; }
     this.enqueue(blocks);
   }
 
@@ -112,8 +115,8 @@ export class TranslationController {
 
   async translateAll(blocks) {
     var chars = blocks.reduce(function (n, b) { return n + b.text.length; }, 0);
-    var ok = await confirmDialog({ title: "남은 본문을 모두 번역할까요?", confirm: "번역 시작",
-      message: blocks.length + "문단, 약 " + Math.round(chars / 1000) + "천 자예요. 연결한 AI의 사용량이나 요금이 그만큼 쓰여요. 이미 번역한 문단은 다시 보내지 않아요." });
+    var ok = await confirmDialog({ title: t("남은 본문을 모두 번역할까요?"), confirm: t("번역 시작"),
+      message: t("{n}문단, 약 {k}천 자예요. 연결한 AI의 사용량이나 요금이 그만큼 쓰여요. 이미 번역한 문단은 다시 보내지 않아요.", { n: blocks.length, k: Math.round(chars / 1000) }) });
     if (ok) this.enqueue(blocks);
   }
 
@@ -121,7 +124,7 @@ export class TranslationController {
     var self = this;
     if (this.reader.tmode === "off") this.reader.setTranslationMode("side");
     var fresh = blocks.filter(function (b) { return !self.store[b.key] && !self.pending.has(b.key); });
-    if (!fresh.length) { toast("이미 번역했어요."); return; }
+    if (!fresh.length) { toast(t("이미 번역했어요.")); return; }
     fresh.forEach(function (b) { self.pending.add(b.key); });
     var batch = [], size = 0;
     fresh.forEach(function (b) {
@@ -150,7 +153,7 @@ export class TranslationController {
           title: this.reader.title(), section: section ? section.title : "", terms: this.app.assistant.keyTerms()
         });
         Object.assign(this.store, result.blocks);
-        if (result.missing && result.missing.length) toast(result.missing.length + "문단은 번역 결과를 받지 못했어요. 다시 시도해 주세요.", true);
+        if (result.missing && result.missing.length) toast(t("{n}문단은 번역 결과를 받지 못했어요. 다시 시도해 주세요.", { n: result.missing.length }), true);
       } catch (error) {
         toast(error.message, true);
         if (error.code === "provider_unavailable") { this.queue.forEach(function (b) { b.forEach(function (x) { self.pending.delete(x.key); }); }); this.queue = []; }
@@ -214,7 +217,7 @@ export class TranslationController {
     var entry = this.store[block.key], self = this;
     var card = h("div", { class: "tcard kind-" + block.kind, "data-key": block.key });
     if (!entry) {
-      card.append(h("div", { class: "pending" }, h("span", { class: "typing" }, h("i"), h("i"), h("i")), " 번역 중"));
+      card.append(h("div", { class: "pending" }, h("span", { class: "typing" }, h("i"), h("i"), h("i")), t(" 번역 중")));
       return card;
     }
     var body = h("div", { class: "ttext" });
@@ -242,7 +245,7 @@ export class TranslationController {
     while ((match = XREF.exec(text))) {
       span.append(text.slice(last, match.index));
       var ref = h("span", { class: "xref" }, match[0]);
-      if (match[1]) { ref.dataset.kind = /^(표|Tab)/i.test(match[1]) ? "table" : /^(알고리즘|Alg)/i.test(match[1]) ? "algorithm" : "figure"; ref.dataset.label = match[2]; }
+      if (match[1]) { ref.dataset.kind = XREF_TABLE.test(match[1]) ? "table" : XREF_ALGORITHM.test(match[1]) ? "algorithm" : "figure"; ref.dataset.label = match[2]; }
       else if (match[3]) { ref.dataset.kind = "equation"; ref.dataset.label = match[4]; }
       else { ref.dataset.kind = "cite"; ref.dataset.label = match[5]; }
       span.append(ref);
@@ -371,7 +374,7 @@ export class TranslationController {
     var translated = !!this.store[block.key], pending = this.pending.has(block.key);
     var heading = block.kind === "heading";
     this.hoverButton.replaceChildren(pending ? "…" : translated ? icon("check", 13) : heading ? "文" : icon("search", 13));
-    this.hoverButton.title = pending ? "번역 중" : translated ? "번역 보기" : heading ? "이 절 번역" : "이 문단 번역";
+    this.hoverButton.title = pending ? t("번역 중") : translated ? t("번역 보기") : heading ? t("이 절 번역") : t("이 문단 번역");
     this.hoverButton.classList.toggle("done", translated);
     this.hoverButton.classList.toggle("section", heading && !translated);
     this.hover.classList.add("show");
@@ -399,4 +402,3 @@ export class TranslationController {
     else this.enqueue([block]);
   }
 }
-

@@ -1,5 +1,6 @@
 import { h, icon } from "./ui.js";
 import { renderMarkdown } from "./markdown.js";
+import { t } from "./i18n.js";
 
 // ---------- Bibliography index (built once from pdf.js text content) ----------
 
@@ -313,9 +314,9 @@ export class CitationPreview {
       if (!content) return; // same page: the target flashed in place
     } else {
       content = [hit.spot.entries.slice(0, 4).map(function (entry) { return self.renderEntry(entry, hit.spot); }),
-        hit.spot.entries.length > 4 ? h("div", { class: "cite-more" }, "외 " + (hit.spot.entries.length - 4) + "편") : null];
+        hit.spot.entries.length > 4 ? h("div", { class: "cite-more" }, t("외 {n}편", { n: hit.spot.entries.length - 4 })) : null];
     }
-    var box = h("div", { class: "cite-pop" + (hit.spot.kind === "visual" ? " visual" : ""), role: "dialog", "aria-label": "미리보기",
+    var box = h("div", { class: "cite-pop" + (hit.spot.kind === "visual" ? " visual" : ""), role: "dialog", "aria-label": t("미리보기"),
       onmouseenter: function () { self.overPopover = true; clearTimeout(self.hideTimer); },
       onmouseleave: function () { self.overPopover = false; self.scheduleHide(); } }, content);
     document.body.append(box);
@@ -341,46 +342,46 @@ export class CitationPreview {
     var label = entry.number != null ? "[" + entry.number + "]" : spot.label;
     var action;
     if (saved && saved.in_library) {
-      action = h("button", { class: "btn small", onclick: function () { self.hide(); app.openDocument(saved.document_id); } }, icon("file", 13), "서재에서 열기");
+      action = h("button", { class: "btn small", onclick: function () { self.hide(); app.openDocument(saved.document_id); } }, icon("file", 13), t("서재에서 열기"));
     } else if (saved) {
-      action = h("button", { class: "btn small added", onclick: function () { self.hide(); app.router.go("/library?folder=reading"); } }, icon("check", 13), "읽어볼 논문에 있음");
+      action = h("button", { class: "btn small added", onclick: function () { self.hide(); app.router.go("/library?folder=reading"); } }, icon("check", 13), t("읽어볼 논문에 있음"));
     } else {
       action = h("button", { class: "btn small primary", onclick: async function (event) {
         var button = event.currentTarget;
         button.disabled = true;
         var item = await app.addToReadingList(entry.text, reader.id);
         if (item) button.replaceWith(h("button", { class: "btn small added", onclick: function () { self.hide(); app.router.go("/library?folder=reading"); } },
-          icon("check", 13), "읽어볼 논문에 추가됨"));
+          icon("check", 13), t("읽어볼 논문에 추가됨")));
         else button.disabled = false;
-      } }, icon("bookmark", 13), "읽어볼 논문에 추가");
+      } }, icon("bookmark", 13), t("읽어볼 논문에 추가"));
     }
     var summary = h("div", { class: "cite-summary", hidden: true });
     var explain = h("button", { class: "btn small", onclick: async function () {
       explain.disabled = true;
-      explain.textContent = "찾는 중…";
+      explain.textContent = t("찾는 중…");
       summary.hidden = false;
       summary.replaceChildren(h("span", { class: "typing" }, h("i"), h("i"), h("i")));
       self.place();
       try {
         var result = await app.api.post("/api/references/explain", { citation: entry.text });
         var meta = result.metadata;
-        var note = result.grounded ? (meta.source === "arxiv" ? "arXiv 초록 기반" : "OpenAlex 초록 기반") : "초록을 찾지 못해 제목만 보고 썼어요";
+        var note = result.grounded ? (meta.source === "arxiv" ? t("arXiv 초록 기반") : t("OpenAlex 초록 기반")) : t("초록을 찾지 못해 제목만 보고 썼어요");
         var body = h("div", { class: "md" });
         renderMarkdown(body, result.summary || "");
         summary.replaceChildren(body, h("div", { class: "cite-source" }, note,
-          meta && meta.url ? [" · ", h("a", { href: meta.url, target: "_blank", rel: "noreferrer" }, "원문 정보")] : null));
+          meta && meta.url ? [" · ", h("a", { href: meta.url, target: "_blank", rel: "noreferrer" }, t("원문 정보"))] : null));
         explain.remove();
       } catch (error) {
         summary.replaceChildren(h("span", { class: "error-text" }, error.message));
         explain.disabled = false;
-        explain.textContent = "다시 시도";
+        explain.textContent = t("다시 시도");
       }
       self.place();
-    } }, icon("sparkle", 13), "논문 설명");
+    } }, icon("sparkle", 13), t("논문 설명"));
     var arxiv = /(\d{4}\.\d{4,5})/.exec((entry.text.match(/arxiv[^\d]{0,12}\d{4}\.\d{4,5}/i) || [""])[0]);
     var query = entry.text.replace(/^\[\d+\]\s*|^\d+\.\s+/, "").slice(0, 250);
     return h("div", { class: "cite-entry" },
-      h("div", { class: "cite-label" }, label, entry.page ? h("span", null, " · " + entry.page + "쪽 참고문헌") : null),
+      h("div", { class: "cite-label" }, label, entry.page ? h("span", null, " · " + t("{n}쪽 참고문헌", { n: entry.page })) : null),
       h("div", { class: "cite-text" }, entry.text),
       summary,
       h("div", { class: "cite-actions" }, action, explain,

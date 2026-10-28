@@ -9,6 +9,7 @@ from ..ports.repositories import CompletionCache
 from ..ports.scholarly import ScholarlyIndex
 from .assistant import AssistantService
 from .references import ReferenceParser, clean_citation
+from ..i18n import _
 
 META_PREFIX = "meta:v1:"
 
@@ -26,7 +27,7 @@ class ReferenceNoteService:
     def metadata(self, citation: str) -> PaperMetadata | None:
         text = clean_citation(citation)
         if len(text) < 8 or len(text) > 2000:
-            raise InvalidInput("참고문헌 형식이 올바르지 않아요.")
+            raise InvalidInput(_("참고문헌 형식이 올바르지 않아요."))
         key = META_PREFIX + hashlib.sha256(text.encode()).hexdigest()
         saved = self._cache.get(key)
         if saved is not None:

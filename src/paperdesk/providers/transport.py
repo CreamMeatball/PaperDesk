@@ -13,6 +13,7 @@ from typing import Any, Iterator, Mapping
 from .. import APP_ID, __version__
 from ..domain.errors import ProviderFailed, ProviderUnavailable
 from ..ports.ai import CommandResult, CommandRunner, HttpClient
+from ..i18n import _
 
 
 class SubprocessRunner(CommandRunner):
@@ -28,9 +29,9 @@ class SubprocessRunner(CommandRunner):
                 env=dict(os.environ, NO_COLOR="1"),
             )
         except subprocess.TimeoutExpired as error:
-            raise ProviderFailed(f"{timeout:.0f}초 안에 응답이 오지 않았어요.") from error
+            raise ProviderFailed(_("{seconds}초 안에 응답이 오지 않았어요.", seconds=f"{timeout:.0f}")) from error
         except OSError as error:
-            raise ProviderUnavailable(f"실행하지 못했어요: {error}") from error
+            raise ProviderUnavailable(_("실행하지 못했어요: {error}", error=str(error))) from error
         return CommandResult(done.returncode, done.stdout, done.stderr)
 
 
@@ -63,7 +64,7 @@ class UrllibHttpClient(HttpClient):
             raise ProviderFailed(f"HTTP {error.code} {_error_text(raw)}") from error
         except (urllib.error.URLError, TimeoutError, OSError) as error:
             reason = getattr(error, "reason", error)
-            raise ProviderUnavailable(f"연결하지 못했어요: {reason}") from error
+            raise ProviderUnavailable(_("연결하지 못했어요: {reason}", reason=str(reason))) from error
 
     def get_json(self, url: str, *, headers: Mapping[str, str], timeout: float) -> Any:
         with self._open("GET", url, headers, None, timeout) as response:

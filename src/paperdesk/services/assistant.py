@@ -9,6 +9,7 @@ from ..domain.models import AssistRequest, Completion
 from ..ports.ai import AIProvider
 from ..ports.repositories import CompletionCache
 from .prompts import PROMPT_VERSION, PromptBuilder
+from ..i18n import _
 
 MAX_TEXT = 80_000
 MAX_IMAGES = 2
@@ -26,11 +27,11 @@ class AssistantService:
     @staticmethod
     def _validate(request: AssistRequest) -> None:
         if not request.text.strip() and not request.images:
-            raise InvalidInput("내용이 비어 있어요.")
+            raise InvalidInput(_("내용이 비어 있어요."))
         if len(request.text) + len(request.context) > MAX_TEXT:
-            raise InvalidInput("한 번에 보내기에는 글이 너무 길어요. 범위를 줄여 주세요.")
+            raise InvalidInput(_("한 번에 보내기에는 글이 너무 길어요. 범위를 줄여 주세요."))
         if len(request.images) > MAX_IMAGES or any(len(i.data) > MAX_IMAGE_BYTES for i in request.images):
-            raise InvalidInput("이미지가 너무 커요.")
+            raise InvalidInput(_("이미지가 너무 커요."))
 
     @staticmethod
     def _key(provider: AIProvider, prompt) -> str:
@@ -46,7 +47,7 @@ class AssistantService:
         if provider is None:
             if cache_only:
                 return None
-            raise ProviderUnavailable("AI가 연결되지 않았어요. 설정에서 사용할 AI를 고르세요.")
+            raise ProviderUnavailable(_("AI가 연결되지 않았어요. 설정에서 사용할 AI를 고르세요."))
         prompt = self._prompts.build(request, images_supported=provider.supports_images)
         key = self._key(provider, prompt)
         cached = self._cache.get(key)

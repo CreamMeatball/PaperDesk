@@ -1,5 +1,6 @@
 import { h, icon, iconButton, MOD } from "./ui.js";
 import { drawRects } from "./textmap.js";
+import { t } from "./i18n.js";
 
 // Find in document (Cmd/Ctrl+F): whitespace-insensitive, case-insensitive, highlights on rendered pages.
 export class FindBar {
@@ -8,8 +9,8 @@ export class FindBar {
     this.hits = [];
     this.index = -1;
     var self = this;
-    this.button = iconButton("search", "문서에서 찾기 (" + MOD + "F)", function () { self.open(); });
-    this.input = h("input", { class: "find-input", placeholder: "문서에서 찾기", "aria-label": "문서에서 찾기",
+    this.button = iconButton("search", t("문서에서 찾기 ({key})", { key: MOD + "F" }), function () { self.open(); });
+    this.input = h("input", { class: "find-input", placeholder: t("문서에서 찾기"), "aria-label": t("문서에서 찾기"),
       oninput: function () { clearTimeout(self.timer); self.timer = setTimeout(function () { self.search(); }, 150); },
       onkeydown: function (event) {
         if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); self.step(event.shiftKey ? -1 : 1); }
@@ -17,9 +18,9 @@ export class FindBar {
       } });
     this.count = h("span", { class: "find-count" });
     this.bar = h("div", { class: "find-bar", hidden: true }, icon("search", 14), this.input, this.count,
-      iconButton("chevronUp", "이전 (⇧⏎)", function () { self.step(-1); }),
-      iconButton("chevronDown", "다음 (⏎)", function () { self.step(1); }),
-      iconButton("close", "닫기 (Esc)", function () { self.close(); }));
+      iconButton("chevronUp", t("이전 (⇧⏎)"), function () { self.step(-1); }),
+      iconButton("chevronDown", t("다음 (⏎)"), function () { self.step(1); }),
+      iconButton("close", t("닫기 (Esc)"), function () { self.close(); }));
     reader.bodyEl.append(this.bar);
   }
 
@@ -61,7 +62,7 @@ export class FindBar {
   }
 
   updateCount() {
-    this.count.textContent = this.input.value.trim() ? (this.hits.length ? (this.index + 1) + "/" + this.hits.length : "없음") : "";
+    this.count.textContent = this.input.value.trim() ? (this.hits.length ? (this.index + 1) + "/" + this.hits.length : t("없음")) : "";
   }
 
   step(direction) {

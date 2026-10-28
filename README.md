@@ -20,6 +20,7 @@ paperdesk            # 앱 창 열기
 - PDF 읽기: 글 선택 → 번역(T)·설명(E)·질문(Q), 논문 요약, 현재 쪽 번역, 본문 전체 검색
 - 논문마다 따로 저장되는 AI 대화, 같은 요청은 로컬 캐시로 재사용
 - 시스템 연동·다크·라이트 테마, 회색 반투명 창(macOS 흐림 효과)
+- 화면 언어: 한국어·English·日本語·简体中文 (처음에는 시스템 언어를 따르고 설정에서 변경). 번역·답변 언어는 따로 고릅니다.
 - Claude 데스크톱·Codex가 내 논문을 읽을 수 있는 MCP 서버 (`paperdesk mcp-config claude|codex`)
 
 ## AI 연결
@@ -66,6 +67,17 @@ pip install -e '.[native]'                      # macOS 네이티브 창 개발
 
 데이터 폴더는 `PAPERDESK_HOME`으로 바꿀 수 있습니다.
 
+### 화면 문구 번역
+
+원문은 한국어이고 그 문장이 그대로 메시지 ID입니다(gettext 방식). 화면은 `t("{n}편 추가", { n: 3 })`, 서버는 `_("폴더를 찾지 못했어요.")`로 감싸고, 번역은 `src/paperdesk/web/static/i18n/<언어>.json`에 둡니다. 서버는 `X-Paperdesk-Lang`(없으면 `Accept-Language`)으로 오류 메시지와 AI 연결 설명을 번역해 보냅니다.
+
+```sh
+python3 scripts/i18n.py check          # 빠진 문구·안 쓰는 문구·{자리표시자} 불일치 검사
+python3 scripts/i18n.py missing ja     # 번역이 필요한 문구 출력
+```
+
+새 언어는 `i18n/<코드>.json`을 만들고 `js/i18n.js`의 `LANGUAGES`와 `src/paperdesk/i18n.py`의 `SUPPORTED`에 코드를 추가합니다.
+
 ## 배포
 
 1. 버전 올리기(`__version__`) → 태그 `vX.Y.Z` push
@@ -76,4 +88,3 @@ pip install -e '.[native]'                      # macOS 네이티브 창 개발
 ## 라이선스
 
 공개 전에 라이선스를 정하세요. 의존성이 모두 허용형(Apache-2.0, BSD, MIT)이라 MIT나 Apache-2.0을 그대로 쓸 수 있습니다. 제3자 고지는 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)에 있습니다.
-

@@ -5,6 +5,7 @@ from pathlib import Path
 from ..domain.models import Prompt
 from ..ports.ai import CommandResult, OptionField
 from .cli import CliProvider, binary_option
+from ..i18n import _
 
 
 class CodexCliProvider(CliProvider):
@@ -16,14 +17,14 @@ class CodexCliProvider(CliProvider):
 
     id = "codex-cli"
     label = "Codex CLI"
-    description = "내 컴퓨터에 설치·로그인된 Codex CLI(codex exec)를 실행합니다. Codex 로그인(ChatGPT 요금제 또는 API 키) 사용량으로 처리됩니다."
+    description = _("내 컴퓨터에 설치·로그인된 Codex CLI(codex exec)를 실행합니다. Codex 로그인(ChatGPT 요금제 또는 API 키) 사용량으로 처리됩니다.")
     docs_url = "https://developers.openai.com/codex/noninteractive"
     executable = "codex"
     supports_images = True
     extra_dirs = ("/Applications/Codex.app/Contents/Resources",)
     login_args = ("login", "status")
     options = (
-        OptionField("model", "모델", placeholder="비워 두면 Codex 기본 모델"),
+        OptionField("model", _("모델"), placeholder=_("비워 두면 Codex 기본 모델")),
         binary_option("codex"),
     )
 
@@ -31,7 +32,7 @@ class CodexCliProvider(CliProvider):
         line = (result.stdout or result.stderr).strip().splitlines()[:1]
         if result.returncode == 0 and line:
             return True, line[0]
-        return False, "Codex에 로그인되어 있지 않아요. 터미널에서 'codex login'을 실행하세요."
+        return False, _("Codex에 로그인되어 있지 않아요. 터미널에서 'codex login'을 실행하세요.")
 
     def build_command(self, path: str, prompt: Prompt, workdir: Path) -> list[str]:
         argv = [

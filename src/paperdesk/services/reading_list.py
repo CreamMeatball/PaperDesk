@@ -11,6 +11,7 @@ from ..ports.repositories import ReadingListRepository
 from ..ports.scholarly import ScholarlyIndex
 from .library import MAX_PDF_BYTES, LibraryService
 from .references import ReferenceParser, clean_citation
+from ..i18n import _
 
 MAX_CITATION = 2000
 
@@ -39,16 +40,16 @@ class ReadingListService:
     def get(self, item_id: str) -> ReadingItem:
         item = self._items.get(item_id)
         if item is None:
-            raise NotFound("읽어볼 논문을 찾지 못했어요.")
+            raise NotFound(_("읽어볼 논문을 찾지 못했어요."))
         return item
 
     def add(self, citation: str, *, source_doc_id: str | None = None, title: str = "") -> tuple[ReadingItem, bool]:
         """Return (item, created). The same paper saved twice (same arXiv id, DOI or title) returns the existing item."""
         text = clean_citation(citation)
         if len(text) < 8:
-            raise InvalidInput("논문 정보가 너무 짧아요.")
+            raise InvalidInput(_("논문 정보가 너무 짧아요."))
         if len(text) > MAX_CITATION:
-            raise InvalidInput("인용문이 너무 길어요. 한 논문만 선택해 주세요.")
+            raise InvalidInput(_("인용문이 너무 길어요. 한 논문만 선택해 주세요."))
         if source_doc_id:
             self._library.get(source_doc_id)
         parsed = self._parser.parse(text)
@@ -70,7 +71,7 @@ class ReadingListService:
         if title is not None:
             clean = " ".join(str(title).split())
             if not clean:
-                raise InvalidInput("제목을 입력하세요.")
+                raise InvalidInput(_("제목을 입력하세요."))
             changes["title"] = clean[:300]
         if note is not None:
             changes["note"] = str(note)[:4000]
@@ -115,7 +116,7 @@ class ReadingListService:
     def fetch_arxiv_pdf(self, item_id: str, folder_id: str | None = None) -> tuple[ReadingItem, Document]:
         item = self.find_arxiv(item_id)
         if not re.fullmatch(r"\d{4}\.\d{4,5}", item.arxiv_id or ""):
-            raise InvalidInput("arXiv에서 같은 제목의 논문을 찾지 못했어요. PDF를 직접 추가해 주세요.")
+            raise InvalidInput(_("arXiv에서 같은 제목의 논문을 찾지 못했어요. PDF를 직접 추가해 주세요."))
         data = self._downloader.download(f"https://arxiv.org/pdf/{item.arxiv_id}", max_bytes=MAX_PDF_BYTES, timeout=90)
         return self.attach_pdf(item_id, f"{item.arxiv_id}.pdf", data, folder_id)
 

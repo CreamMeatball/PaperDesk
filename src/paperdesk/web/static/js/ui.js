@@ -1,3 +1,4 @@
+import { t } from "./i18n.js";
 // Small DOM helpers shared by every view. No framework on purpose: fewer moving parts to package.
 
 var ICONS = {
@@ -137,8 +138,8 @@ export function askText(options) {
     return h("div", { class: "dialog", role: "dialog" },
       h("h3", null, options.title), options.message ? h("p", null, options.message) : null, input,
       h("div", { class: "buttons" },
-        h("button", { class: "btn", onclick: function () { done(null); } }, "취소"),
-        h("button", { class: "btn primary", onclick: submit }, options.confirm || "확인")));
+        h("button", { class: "btn", onclick: function () { done(null); } }, t("취소")),
+        h("button", { class: "btn primary", onclick: submit }, options.confirm || t("확인"))));
   });
 }
 
@@ -147,19 +148,19 @@ export function confirmDialog(options) {
     return h("div", { class: "dialog", role: "alertdialog" },
       h("h3", null, options.title), options.message ? h("p", null, options.message) : null,
       h("div", { class: "buttons" },
-        h("button", { class: "btn", onclick: function () { done(false); } }, "취소"),
+        h("button", { class: "btn", onclick: function () { done(false); } }, t("취소")),
         h("button", { class: "btn primary" + (options.danger ? " danger" : ""), style: options.danger ? "background:var(--danger)" : null,
-          onclick: function () { done(true); } }, options.confirm || "확인")));
+          onclick: function () { done(true); } }, options.confirm || t("확인"))));
   });
 }
 
 export function relativeTime(iso) {
   if (!iso) return "—";
   var then = new Date(iso), seconds = (Date.now() - then.getTime()) / 1000;
-  if (seconds < 60) return "방금";
-  if (seconds < 3600) return Math.floor(seconds / 60) + "분 전";
-  if (seconds < 86400) return Math.floor(seconds / 3600) + "시간 전";
-  if (seconds < 86400 * 7) return Math.floor(seconds / 86400) + "일 전";
+  if (seconds < 60) return t("방금");
+  if (seconds < 3600) return t("{n}분 전", { n: Math.floor(seconds / 60) });
+  if (seconds < 86400) return t("{n}시간 전", { n: Math.floor(seconds / 3600) });
+  if (seconds < 86400 * 7) return t("{n}일 전", { n: Math.floor(seconds / 86400) });
   return then.toLocaleDateString();
 }
 

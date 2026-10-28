@@ -11,6 +11,7 @@ from ..domain.models import AssistRequest, AssistTask, BlockTranslation, utcnow
 from ..ports.repositories import TranslationRepository
 from .assistant import AssistantService
 from .library import LibraryService
+from ..i18n import _
 
 MAX_BLOCKS = 16
 MAX_BATCH_CHARS = 9000
@@ -66,20 +67,20 @@ class TranslationService:
     @staticmethod
     def parse_blocks(raw: list) -> list[BlockInput]:
         if not isinstance(raw, list) or not raw:
-            raise InvalidInput("번역할 문단이 없어요.")
+            raise InvalidInput(_("번역할 문단이 없어요."))
         if len(raw) > MAX_BLOCKS:
-            raise InvalidInput(f"한 번에 {MAX_BLOCKS}문단까지 번역할 수 있어요.")
+            raise InvalidInput(_("한 번에 {n}문단까지 번역할 수 있어요.", n=MAX_BLOCKS))
         blocks, total = [], 0
         for item in raw:
             key = str((item or {}).get("key", ""))
             sentences = item.get("sentences") if isinstance(item, dict) else None
             if not _KEY.match(key) or not isinstance(sentences, list) or not sentences:
-                raise InvalidInput("문단 형식이 올바르지 않아요.")
+                raise InvalidInput(_("문단 형식이 올바르지 않아요."))
             clean = tuple(" ".join(str(s).split()) for s in sentences if str(s).strip())[:200]
             total += sum(len(s) for s in clean)
             blocks.append(BlockInput(key, clean))
         if total > MAX_BATCH_CHARS * 2:
-            raise InvalidInput("한 번에 보내기에는 글이 너무 길어요.")
+            raise InvalidInput(_("한 번에 보내기에는 글이 너무 길어요."))
         return blocks
 
     def translate(self, doc_id: str, blocks: list[BlockInput], *, title: str = "", section: str = "", terms: str = "") -> dict:

@@ -1,12 +1,13 @@
 import { h, icon, toast } from "./ui.js";
 import { rectContains } from "./textmap.js";
+import { t } from "./i18n.js";
 
 var NAMES = { figure: "그림", table: "표", algorithm: "알고리즘", equation: "식" };
 var MENTION = /\b(Figures?|Figs?\.|Tables?|Tabs?\.|Algorithms?|Alg\.)\s*~?\s*(\d+|[A-Z]\.\d+)(?:\s*\(?([a-z])\)?(?![A-Za-z]))?|\b(Eqs?\.|Equations?)\s*~?\s*\(?(\d+)\)?/g;
 
 function kindOf(word) { return /^tab/i.test(word) ? "table" : /^alg/i.test(word) ? "algorithm" : "figure"; }
 export function visualName(target) {
-  return target.kind === "equation" ? (target.number ? "식 (" + target.number + ")" : "식") : NAMES[target.kind] + " " + target.label;
+  return target.kind === "equation" ? (target.number ? t("식 ({n})", { n: target.number }) : t("식")) : t(NAMES[target.kind]) + " " + target.label;
 }
 
 // Figures, tables, algorithms and equations: hover outlines with explain buttons, and previews for in-text references.
@@ -73,12 +74,12 @@ export class Visuals {
     if (this.images.has(key)) img.src = this.images.get(key);
     else this.reader.cropImage(target.page, target.rect, 900).then(function (url) { self.images.set(key, url); img.src = url; });
     return h("div", { class: "visual-preview" },
-      h("div", { class: "cite-label" }, visualName(target), h("span", null, " · " + target.page + "쪽")),
+      h("div", { class: "cite-label" }, visualName(target), h("span", null, " · " + t("{n}쪽", { n: target.page }))),
       img,
       target.caption && target.kind !== "equation" ? h("div", { class: "visual-caption" }, target.caption.length > 320 ? target.caption.slice(0, 320) + "…" : target.caption) : null,
       h("div", { class: "cite-actions" },
-        h("button", { class: "btn small", onclick: function () { self.reader.citations.hide(); self.reader.flashRect(target.page, target.rect, true); } }, icon("chevron", 13), target.page + "쪽으로 이동"),
-        h("button", { class: "btn small", onclick: function () { self.reader.citations.hide(); self.explain(target); } }, icon("sparkle", 13), visualName(target) + " 설명")));
+        h("button", { class: "btn small", onclick: function () { self.reader.citations.hide(); self.reader.flashRect(target.page, target.rect, true); } }, icon("chevron", 13), t("{n}쪽으로 이동", { n: target.page })),
+        h("button", { class: "btn small", onclick: function () { self.reader.citations.hide(); self.explain(target); } }, icon("sparkle", 13), t("{name} 설명", { name: visualName(target) }))));
   }
 
   // ---------- hover outline + explain button ----------
@@ -102,7 +103,7 @@ export class Visuals {
     layer.append(this.box);
     this.box.className = "visual-hover " + target.kind;
     this.box.style.cssText = "left:" + r[0] * 100 + "%;top:" + r[1] * 100 + "%;width:" + (r[2] - r[0]) * 100 + "%;height:" + (r[3] - r[1]) * 100 + "%";
-    this.button.replaceChildren(target.kind === "equation" ? "∑" : icon("sparkle", 13), " " + visualName(target) + " 설명");
+    this.button.replaceChildren(target.kind === "equation" ? "∑" : icon("sparkle", 13), " " + t("{name} 설명", { name: visualName(target) }));
   }
 
   scheduleHide() {

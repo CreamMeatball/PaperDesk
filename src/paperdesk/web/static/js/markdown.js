@@ -1,3 +1,4 @@
+import { t } from "./i18n.js";
 // Markdown + KaTeX for AI answers. marked, DOMPurify and katex are loaded as classic scripts in index.html.
 
 function escapeHtml(text) {
