@@ -22,8 +22,12 @@ function startServer() {
   });
 }
 async function stopServer(child) {
-  if (child.exitCode !== null) return;
-  await new Promise(resolve => { child.once('exit', resolve); child.kill('SIGINT'); });
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise(resolve => {
+    const timer=setTimeout(()=>child.kill('SIGTERM'),5000);
+    child.once('exit',()=>{clearTimeout(timer);resolve();});
+    child.kill('SIGINT');
+  });
 }
 async function contextFor(base) {
   const context = await browser.newContext({viewport:{width:1500,height:920}});
@@ -90,7 +94,7 @@ async function waitFor(fn) { for(let i=0;i<100;i++) { if(await fn()) return; awa
   await page.evaluate(()=>{window.pendingRun=window.paperdesk.assistant.run({task:'ask',text:'original paper',question:'switch-paper'});});
   await started;
   await page.evaluate(id=>window.paperdesk.router.go('/reader?id='+id),other);
-  await page.waitForFunction(id=>window.paperdesk.view?.id===id&&window.paperdesk.view.analysis,other);
+  await page.waitForFunction(id=>window.paperdesk.view?.id===id&&window.paperdesk.view.analysis,other,{timeout:60000});
   release(); await page.evaluate(()=>window.pendingRun);
   assert((await read(context,first.url+'api/documents/'+paper+'/conversation')).turns.some(t=>t.answer==='response for original paper'));
   assert.equal((await read(context,first.url+'api/documents/'+other+'/conversation')).turns.length,0);
@@ -120,6 +124,26 @@ async function waitFor(fn) { for(let i=0;i<100;i++) { if(await fn()) return; awa
   await page.evaluate(()=>window.paperdesk.assistant.history.ready);
   assert.equal(await page.evaluate(()=>window.paperdesk.assistant.turns.length),0);
   assert.equal(await page.evaluate(()=>document.documentElement.dataset.theme),'light');
+  // Development builds show the real unavailable state, without claiming to be up to date.
+  await page.goto(second.url+'settings');
+  const updates=page.getByTestId('app-updates');
+  await updates.waitFor();
+  assert(await updates.getByRole('button',{name:'Check for updates'}).isDisabled());
+  assert(await updates.getByRole('checkbox').isDisabled());
+  // Exercise the settings UI contract without loading Cocoa/Sparkle in Linux.
+  let automatic=false, checks=0;
+  await context.route('**/api/updates',route=>route.fulfill({json:{version:'0.1.0',available:true,can_check:true,automatic_checks:automatic,message:''}}));
+  await context.route('**/api/updates/preferences',route=>{
+    automatic=route.request().postDataJSON().automatic_checks;
+    return route.fulfill({json:{version:'0.1.0',available:true,can_check:true,automatic_checks:automatic,message:''}});
+  });
+  await context.route('**/api/updates/check',route=>{checks++;return route.fulfill({json:{opened:true}});});
+  await page.reload();
+  await page.getByTestId('app-updates').getByRole('checkbox').check();
+  await waitFor(()=>automatic);
+  await page.getByTestId('app-updates').getByRole('button',{name:'Check for updates'}).click();
+  await waitFor(()=>checks===1);
+  await page.screenshot({path:root+'/settings-updates.png',fullPage:true});
   await context.close(); await stopServer(second.process);
   assert.deepEqual(errors,[]); assert.deepEqual(external,[]); assert.deepEqual(serverErrors,[]);
   console.log(JSON.stringify({root,ports:[first.url,second.url],legacyMigrated:true,restored:['PDF','translations','notes','chat','theme','panels','navigator','translation mode'],externalRequests:external,consoleErrors:errors},null,2));

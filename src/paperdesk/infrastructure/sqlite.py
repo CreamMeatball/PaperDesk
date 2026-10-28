@@ -11,6 +11,8 @@ from dataclasses import fields
 import json
 
 from ..domain.models import Annotation, BlockTranslation, Document, Folder, ReadingItem
+from ..domain.errors import InvalidInput
+from ..i18n import _
 from ..ports.repositories import (AnnotationRepository, CompletionCache, ConversationRepository, DocumentRepository,
                                   FolderRepository, PageTextRepository, PreferenceRepository, ReadingListRepository,
                                   TranslationRepository)
@@ -126,11 +128,21 @@ class Database:
 
     def _migrate(self) -> None:
         with self.connect() as db:
-            db.execute("PRAGMA journal_mode = WAL")
             version = db.execute("PRAGMA user_version").fetchone()[0]
+            if version > len(MIGRATIONS):
+                raise InvalidInput(_("이 서재는 더 최신 앱에서 저장되었어요. Paperdesk를 업데이트한 뒤 다시 열어 주세요."))
+            db.execute("PRAGMA journal_mode = WAL")
+            if 0 < version < len(MIGRATIONS):
+                folder = self.path.parent / "backups" / "migrations"
+                folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+                stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+                backup = sqlite3.connect(folder / f"library-v{version}-{stamp}.sqlite3")
+                try:
+                    db.backup(backup)  # includes committed WAL data; a raw file copy would not
+                finally:
+                    backup.close()
             for number, script in enumerate(MIGRATIONS[version:], start=version + 1):
-                db.executescript(script)
-                db.execute(f"PRAGMA user_version = {number}")
+                db.executescript(f"BEGIN IMMEDIATE;\n{script}\nPRAGMA user_version = {number};\nCOMMIT;")
 
 
 _DOC_COLUMNS = "id, title, filename, sha256, size_bytes, created_at, folder_id, last_opened_at, page_count, text_pages"

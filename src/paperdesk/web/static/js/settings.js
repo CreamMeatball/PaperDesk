@@ -33,8 +33,8 @@ export class SettingsView {
     }
     var data = app.settings.data;
     if (!this.open.size && data.provider) this.open.add(data.provider);
-    var health = null;
-    try { health = await app.api.get("/api/health"); } catch (error) { health = null; }
+    var updates = null;
+    try { updates = await app.api.get("/api/updates"); } catch (error) { updates = null; }
     this.inner.replaceChildren(
       h("h2", null, t("설정")),
       h("p", { class: "lead" }, t("모든 논문과 설정은 이 컴퓨터에만 저장돼요. API 키는 macOS 키체인에 보관해요.")),
@@ -44,8 +44,35 @@ export class SettingsView {
       h("div", { class: "group" }, data.providers.map(function (p) { return self.providerCard(p, data.provider); })),
       h("h3", null, t("Claude 데스크톱·Codex에서 내 논문 읽기")),
       this.mcpSection(),
-      h("h3", null, t("정보")),
-      h("div", { class: "group" }, h("div", { class: "field-row" }, h("div", { class: "k" }, t("버전")), h("span", null, health ? health.version : "—"))));
+      h("h3", null, t("정보·업데이트")),
+      this.updateSection(updates));
+  }
+
+  updateSection(data) {
+    var self = this;
+    var automatic = h("input", { type: "checkbox", checked: !!(data && data.automatic_checks),
+      disabled: !data || !data.available, "aria-label": t("새 버전 자동 확인"), onchange: async function () {
+        automatic.disabled = true;
+        try { await self.app.api.put("/api/updates/preferences", { automatic_checks: automatic.checked }); }
+        catch (error) { automatic.checked = !automatic.checked; toast(error.message, true); }
+        automatic.disabled = false;
+      } });
+    return h("div", { class: "group", "data-testid": "app-updates" },
+      h("div", { class: "field-row" }, h("div", { class: "k" }, t("버전")), h("span", null, data ? data.version : "—")),
+      h("div", { class: "field-row" }, h("div", { class: "k" }, t("앱 업데이트"),
+        h("small", null, data && data.message ? data.message : t("새 버전 안내에서 다운로드·설치·재실행을 진행해요. 논문과 메모는 유지돼요."))),
+        h("button", { class: "btn", disabled: !data || !data.can_check, onclick: async function (event) {
+          var button = event.currentTarget;
+          button.disabled = true;
+          try { await self.app.api.post("/api/updates/check"); }
+          catch (error) { toast(error.message, true); }
+          finally { if (button.isConnected) button.disabled = false; }
+        } }, t("업데이트 확인"))),
+      h("div", { class: "field-row" }, h("div", { class: "k" }, t("새 버전 자동 확인"),
+        h("small", null, t("켜면 주기적으로 업데이트 서버에 연결해요. 설치 전에 확인을 받아요."))), automatic),
+      h("div", { class: "field-row" }, h("div", { class: "k" }, t("Homebrew로 업데이트"),
+        h("small", null, t("Homebrew로 설치했다면 터미널에서 실행할 수 있어요.")),
+        h("code", null, "brew upgrade --cask paperdesk"))));
   }
 
   general(data) {
@@ -174,4 +201,3 @@ export class SettingsView {
       h("pre", { class: "code" }, t("paperdesk mcp-config claude   # Claude 데스크톱\npaperdesk mcp-config codex    # Codex"))));
   }
 }
-

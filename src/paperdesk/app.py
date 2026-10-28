@@ -29,6 +29,7 @@ from .services.reading_list import ReadingListService
 from .services.reference_notes import ReferenceNoteService
 from .services.translation import TranslationService
 from .services.settings import SettingsService
+from .services.updates import UpdateService
 
 
 @dataclass
@@ -45,6 +46,7 @@ class Application:
     reference_notes: ReferenceNoteService
     conversations: ConversationService
     preferences: PreferenceService
+    updates: UpdateService
 
     @classmethod
     def build(cls, paths: AppPaths | None = None, *, secrets: SecretStore | None = None,
@@ -77,4 +79,4 @@ class Application:
         conversations = ConversationService(SqliteConversationRepository(database), library)
         preferences = PreferenceService(SqlitePreferenceRepository(database))
         return cls(paths, platform, library, folders, assistant, settings, reading, annotations, translations, notes,
-                   conversations, preferences)
+                   conversations, preferences, UpdateService())

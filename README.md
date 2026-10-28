@@ -25,6 +25,17 @@ PDF 읽기, 그림·참고문헌 미리보기, 저장된 번역·대화·메모 
 
 ## 설치 (macOS)
 
+아래 명령의 `OWNER`는 실제 배포 계정으로 바꿔야 합니다. 아직 공개된 Homebrew 저장소나 DMG는 없습니다.
+
+배포용 앱은 Cask로 설치·업데이트합니다. `.app`에는 Python과 필요한 라이브러리가 포함됩니다.
+
+```sh
+brew install --cask OWNER/tap/paperdesk
+brew upgrade --cask paperdesk
+```
+
+소스/CLI 설치용 Formula 틀도 유지합니다.
+
 ```sh
 brew tap OWNER/paperdesk https://github.com/OWNER/homebrew-paperdesk
 brew install paperdesk
@@ -98,6 +109,16 @@ python3 scripts/i18n.py missing ja     # 번역이 필요한 문구 출력
 새 언어는 `i18n/<코드>.json`을 만들고 `js/i18n.js`의 `LANGUAGES`와 `src/paperdesk/i18n.py`의 `SUPPORTED`에 코드를 추가합니다.
 
 ## 배포
+
+### macOS 앱·DMG·업데이트
+
+설정의 **정보·업데이트**에서 새 버전을 확인하고, 배포용 macOS 앱은 Sparkle의 안내로 다운로드·설치·재실행할 수 있도록 연결했습니다. 자동 확인은 사용자가 켜며, 설치에는 확인이 필요합니다. 개발 실행이나 배포 주소/서명 키가 없는 빌드는 업데이트 불가 상태를 표시합니다. 실제 설치·재실행은 서명된 Mac 빌드로 검증해야 합니다.
+
+`scripts/build_macos.py`는 앱·아이콘·Sparkle을 묶고 서명·공증·DMG 생성을 수행합니다. `scripts/release_macos.py`는 최종 DMG로 서명된 업데이트 피드와 Homebrew Cask를 준비합니다. 빌드 번호는 매번 증가시키며 사용자 데이터는 앱과 별도 보관합니다. DB 스키마 변경 전에는 `backups/migrations/`에 자동 백업하고, 마이그레이션 실패는 롤백합니다.
+
+Mac 준비, 키 설정, 빌드·배포 명령과 검증 범위는 [docs/macos-updates.md](docs/macos-updates.md)에 있습니다. 스크립트는 로컬 파일만 준비하며 GitHub 릴리스·업데이트 피드·Homebrew 저장소에 자동 게시하지 않습니다.
+
+### 소스/CLI Formula
 
 1. 버전 올리기(`__version__`) → 태그 `vX.Y.Z` push
 2. Mac에서 `python3 scripts/release.py --repo OWNER/paperdesk --license <SPDX>`

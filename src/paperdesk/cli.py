@@ -30,7 +30,7 @@ def command_open(args: argparse.Namespace) -> int:
     from .web.server import create_server
 
     app = Application.build()
-    shell = choose_shell(args.shell, app.platform, app.paths.webview_storage)
+    shell = choose_shell(args.shell, app.platform, app.paths.webview_storage, app.updates)
     if _running_instance(args.port):
         shell.run(f"http://127.0.0.1:{args.port}/")
         return 0
@@ -73,6 +73,8 @@ def command_mcp(args: argparse.Namespace) -> int:
 
 
 def _launcher() -> tuple[str, list[str]]:
+    if getattr(sys, "frozen", False):
+        return sys.executable, ["mcp"]
     script = shutil.which(APP_ID)
     if script:
         return str(Path(script).resolve()), ["mcp"]
@@ -151,4 +153,3 @@ def main(argv: list[str] | None = None) -> int:
     if not getattr(args, "func", None):
         args = parser.parse_args(["open", *(argv if argv is not None else sys.argv[1:])])
     return args.func(args)
-

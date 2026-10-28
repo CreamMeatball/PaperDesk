@@ -10,6 +10,7 @@ from typing import ClassVar
 
 from . import APP_NAME
 from .platforms import Platform
+from .services.updates import UpdateService
 
 
 class DesktopShell(ABC):
@@ -30,9 +31,10 @@ class NativeWindowShell(DesktopShell):
     name = "native"
     blocks = True
 
-    def __init__(self, platform: Platform, storage: Path) -> None:
+    def __init__(self, platform: Platform, storage: Path, updates: UpdateService | None = None) -> None:
         self.platform = platform
         self.storage = storage
+        self.updates = updates
 
     @classmethod
     def is_available(cls) -> bool:
@@ -40,6 +42,12 @@ class NativeWindowShell(DesktopShell):
 
     def run(self, url: str) -> None:
         import webview  # optional dependency, imported only when a window is requested
+
+        updater = None
+        if self.platform.name == "macos" and self.updates is not None:
+            from .infrastructure.macos_updates import SparkleUpdates
+            updater = SparkleUpdates()
+            self.updates.attach(updater)
 
         self.storage.mkdir(parents=True, exist_ok=True)
         webview.create_window(
@@ -51,7 +59,7 @@ class NativeWindowShell(DesktopShell):
             text_select=True,  # pywebview disables selection by default; readers need it
             **self.platform.window_options(),
         )
-        webview.start(private_mode=False, storage_path=str(self.storage))
+        webview.start(func=updater.start if updater else None, private_mode=False, storage_path=str(self.storage))
 
 
 class BrowserShell(DesktopShell):
@@ -68,10 +76,9 @@ class BrowserShell(DesktopShell):
         webbrowser.open(url)
 
 
-def choose_shell(preference: str, platform: Platform, storage: Path) -> DesktopShell:
+def choose_shell(preference: str, platform: Platform, storage: Path, updates: UpdateService | None = None) -> DesktopShell:
     if preference in ("auto", "native") and NativeWindowShell.is_available():
-        return NativeWindowShell(platform, storage)
+        return NativeWindowShell(platform, storage, updates)
     if preference == "native":
         raise RuntimeError("네이티브 창에 필요한 pywebview가 설치되어 있지 않아요.")
     return BrowserShell()
-

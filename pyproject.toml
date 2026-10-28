@@ -13,6 +13,7 @@ dependencies = []
 [project.optional-dependencies]
 # Native macOS window (WKWebView). Without it, Paperdesk opens in the default browser.
 native = ["pywebview>=5.3"]
+mac-build = ["pywebview>=5.3", "pyinstaller>=6.12,<7"]
 
 [project.scripts]
 paperdesk = "paperdesk.cli:main"
@@ -25,4 +26,3 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 paperdesk = ["web/static/**/*"]
-

@@ -6,4 +6,4 @@ APP_NAME / APP_ID are the only places the product name lives (working name; rena
 __version__ = "0.1.0"
 APP_NAME = "Paperdesk"
 APP_ID = "paperdesk"
-
+MAC_BUNDLE_ID = "org.paperdesk.Paperdesk"

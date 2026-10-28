@@ -59,12 +59,25 @@ class ApiController:
             ("PUT", "/api/settings", self.update_settings),
             ("PUT", "/api/providers/{provider_id}", self.update_provider),
             ("POST", "/api/providers/{provider_id}/test", self.test_provider),
+            ("GET", "/api/updates", self.update_status),
+            ("POST", "/api/updates/check", self.check_updates),
+            ("PUT", "/api/updates/preferences", self.update_preferences_native),
         ]
         for method, pattern, handler in routes:
             router.add(method, pattern, handler)
 
     def health(self, request: Request) -> Response:
         return Response.json({"app": APP_ID, "version": __version__})
+
+    def update_status(self, request: Request) -> Response:
+        return Response.json(self.app.updates.view(request.lang))
+
+    def check_updates(self, request: Request) -> Response:
+        return Response.json(self.app.updates.check())
+
+    def update_preferences_native(self, request: Request) -> Response:
+        self.app.updates.configure(request.json().get("automatic_checks"))
+        return Response.json(self.app.updates.view(request.lang))
 
     def conversation(self, request: Request) -> Response:
         return Response.json({"turns": self.app.conversations.get(request.params["doc_id"])})
