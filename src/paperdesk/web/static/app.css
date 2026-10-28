@@ -72,9 +72,9 @@ a { color: var(--accent); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .app {
+  position: fixed; inset: 0; /* nothing outside the app frame can scroll */
   display: grid;
   grid-template-columns: var(--sb-w) minmax(0, 1fr) var(--as-w);
-  height: 100vh;
   background: var(--window);
   backdrop-filter: blur(30px) saturate(150%);
   -webkit-backdrop-filter: blur(30px) saturate(150%);
