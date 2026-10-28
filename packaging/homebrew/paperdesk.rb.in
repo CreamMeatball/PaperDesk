@@ -7,6 +7,7 @@ class Paperdesk < Formula
   url "@URL@"
   sha256 "@SHA256@"
 @LICENSE_LINE@
+
   depends_on :macos
   depends_on "python@3.13"
 
@@ -14,6 +15,7 @@ class Paperdesk < Formula
   #   brew update-python-resources --print-only Formula/paperdesk.rb
   # and paste the output here (setuptools first, because Homebrew builds without isolation).
 @RESOURCES@
+
   def install
     virtualenv_install_with_resources
   end
