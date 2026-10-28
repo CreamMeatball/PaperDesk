@@ -1,0 +1,110 @@
+import { h, icon, iconButton, menuAt, MOD } from "./ui.js";
+import { FOLDER_TYPE, makeDropTarget } from "./dnd.js";
+
+var THEME_ICONS = { system: "monitor", dark: "moon", light: "sun" };
+var THEME_NEXT = { system: "dark", dark: "light", light: "system" };
+var THEME_LABEL = { system: "시스템 연동", dark: "다크", light: "라이트" };
+
+export class Sidebar {
+  constructor(root, app) {
+    this.root = root;
+    this.app = app;
+    this.searchValue = "";
+  }
+
+  render() {
+    var app = this.app, route = app.router.route, self = this;
+    var input = h("input", {
+      type: "search", placeholder: "논문 검색", value: route.name === "library" ? route.query : this.searchValue,
+      "aria-label": "논문 검색",
+      onkeydown: function (event) {
+        if (event.key === "Enter" && !event.isComposing) app.search(input.value.trim());
+        if (event.key === "Escape") { input.value = ""; app.search(""); input.blur(); }
+      },
+      oninput: function () { self.searchValue = input.value; }
+    });
+    this.searchInput = input;
+
+    var nav = h("div", null,
+      this.navItem("books", "모든 논문", app.store.documents.length, route.name === "library" && route.scope === "all" && !route.query,
+        function () { app.router.go("/library"); }, null, "all"),
+      this.navItem("clock", "최근에 연 논문", null, route.name === "library" && route.scope === "recent",
+        function () { app.router.go("/library?folder=recent"); }),
+      this.navItem("inbox", "분류 안 됨", app.store.documentsIn("unfiled").length, route.name === "library" && route.scope === "unfiled",
+        function () { app.router.go("/library?folder=unfiled"); }, null, "unfiled"));
+
+    var tree = h("div", { role: "tree" });
+    this.renderFolders(tree, null, 0, route);
+
+    var themeChoice = window.paperdeskTheme.get();
+    this.root.replaceChildren(
+      h("div", { class: "sb-head" },
+        h("div", { class: "brand" }, h("span", { class: "brand-mark" }, "P"), "Paperdesk"),
+        iconButton("upload", "PDF 가져오기 (" + MOD + "O)", function () { app.pickFiles(app.currentFolder()); }),
+        iconButton("sidebar", "사이드바 숨기기 (" + MOD + "\\)", function () { app.toggleSidebar(); })),
+      h("label", { class: "search" }, icon("search", 14), input, h("kbd", null, MOD + "K")),
+      h("div", { class: "sb-scroll" },
+        nav,
+        h("div", { class: "sb-label" }, "폴더",
+          iconButton("folderPlus", "새 폴더", function () { app.newFolder(null); })),
+        tree,
+        app.store.folders.length ? null : h("div", { style: "padding:4px 8px;color:var(--text-3);font-size:12px" }, "주제별 폴더를 만들어 논문을 정리하세요.")),
+      h("div", { class: "sb-foot" },
+        h("button", { class: "nav-item" + (route.name === "settings" ? " active" : ""), onclick: function () { app.router.go("/settings"); } },
+          icon("settings"), h("span", { class: "label" }, "설정")),
+        iconButton(THEME_ICONS[themeChoice], "테마: " + THEME_LABEL[themeChoice], function () {
+          window.paperdeskTheme.set(THEME_NEXT[themeChoice]);
+          self.render();
+          app.themeChanged();
+        })));
+  }
+
+  navItem(iconName, label, count, active, onClick, extra, dropScope) {
+    var item = h("button", Object.assign({ class: "nav-item" + (active ? " active" : ""), onclick: onClick }, extra || {}),
+      h("span", { class: "twisty leaf" }), icon(iconName), h("span", { class: "label" }, label),
+      count == null ? null : h("span", { class: "count" }, count));
+    if (dropScope) makeDropTarget(item, this.app, null);
+    return item;
+  }
+
+  renderFolders(container, parentId, depth, route) {
+    var self = this, app = this.app, store = app.store;
+    store.children(parentId).forEach(function (folder) {
+      var kids = store.children(folder.id);
+      var open = store.isExpanded(folder.id);
+      var twisty = h("span", {
+        class: "twisty" + (kids.length ? "" : " leaf") + (open ? " open" : ""),
+        onclick: function (event) { event.stopPropagation(); store.setExpanded(folder.id, !open); }
+      }, icon("chevron", 12));
+      var row = h("button", {
+        class: "nav-item" + (route.name === "library" && route.scope === folder.id ? " active" : ""),
+        role: "treeitem", "aria-expanded": kids.length ? String(open) : null, draggable: "true",
+        style: "padding-left:" + (8 + depth * 14) + "px",
+        onclick: function () { app.router.go("/library?folder=" + folder.id); },
+        oncontextmenu: function (event) { event.preventDefault(); menuAt(row, self.folderMenu(folder)); },
+        ondragstart: function (event) {
+          event.dataTransfer.setData(FOLDER_TYPE, folder.id);
+          event.dataTransfer.effectAllowed = "move";
+        }
+      }, twisty, icon("folder"), h("span", { class: "label" }, folder.name), h("span", { class: "count" }, store.countIn(folder.id) || ""),
+        h("span", { class: "more icon-btn", style: "width:20px;height:20px", title: "폴더 메뉴",
+          onclick: function (event) { event.stopPropagation(); menuAt(event.currentTarget, self.folderMenu(folder)); } }, icon("more", 14)));
+      makeDropTarget(row, app, folder.id);
+      container.append(row);
+      if (open && kids.length) self.renderFolders(container, folder.id, depth + 1, route);
+    });
+  }
+
+  folderMenu(folder) {
+    var app = this.app;
+    return [
+      { label: "하위 폴더 만들기", icon: "folderPlus", onClick: function () { app.newFolder(folder.id); } },
+      { label: "이 폴더로 PDF 가져오기", icon: "upload", onClick: function () { app.pickFiles(folder.id); } },
+      { label: "이름 바꾸기", icon: "pencil", onClick: function () { app.renameFolder(folder); } },
+      { label: "다른 폴더로 옮기기", icon: "move", onClick: function () { app.chooseFolderFor({ folder: folder }); } },
+      "-",
+      { label: "폴더 삭제", icon: "trash", danger: true, onClick: function () { app.deleteFolder(folder); } }
+    ];
+  }
+}
+

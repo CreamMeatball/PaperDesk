@@ -1,0 +1,144 @@
+from __future__ import annotations
+
+import logging
+import mimetypes
+import shutil
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qsl, urlsplit
+
+from .. import APP_NAME, __version__
+from ..app import Application
+from ..domain.errors import InvalidInput, NotFound, ReaderError
+from .api import MAX_UPLOAD, ApiController
+from .http import Request, Response, Router
+
+STATIC_DIR = Path(__file__).with_name("static")
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "[::1]")
+APP_ROUTES = ("/", "/library", "/reader", "/settings")  # client-side routes all serve the app shell
+CLIENT_HEADER = "X-Paperdesk"
+log = logging.getLogger("paperdesk.web")
+
+
+class Forbidden(ReaderError):
+    status = 403
+    code = "forbidden"
+
+
+class PaperdeskServer(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def __init__(self, address: tuple[str, int], app: Application, *, static_dir: Path = STATIC_DIR) -> None:
+        super().__init__(address, RequestHandler)
+        self.app = app
+        self.static_dir = static_dir.resolve()
+        self.router = Router()
+        ApiController(app).register(self.router)
+
+    @property
+    def url(self) -> str:
+        host, port = self.server_address[:2]
+        return f"http://{'127.0.0.1' if host in ('', '0.0.0.0') else host}:{port}/"
+
+
+class RequestHandler(BaseHTTPRequestHandler):
+    server: PaperdeskServer
+    server_version = f"{APP_NAME}/{__version__}"
+    protocol_version = "HTTP/1.1"
+
+    def do_GET(self) -> None: self._dispatch()
+    def do_POST(self) -> None: self._dispatch()
+    def do_PUT(self) -> None: self._dispatch()
+    def do_PATCH(self) -> None: self._dispatch()
+    def do_DELETE(self) -> None: self._dispatch()
+
+    def log_message(self, format: str, *args) -> None:  # noqa: A002 - signature from BaseHTTPRequestHandler
+        log.debug("%s %s", self.address_string(), format % args)
+
+    def _dispatch(self) -> None:
+        url = urlsplit(self.path)
+        try:
+            self._check_host()
+            if url.path.startswith("/api/"):
+                response = self._api(url.path, dict(parse_qsl(url.query)))
+            else:
+                response = self._static(url.path)
+        except ReaderError as error:
+            self._drain()
+            response = Response.error(error)
+        except Exception:  # keep the server alive; details go to the log only
+            log.exception("unhandled error for %s %s", self.command, url.path)
+            response = Response.json({"error": {"code": "internal", "message": "예상하지 못한 오류가 났어요."}}, 500)
+        self._send(response)
+
+    def _check_host(self) -> None:
+        # Blocks DNS-rebinding: only accept requests addressed to this machine's loopback name.
+        host = self.headers.get("Host", "")
+        name = host.rsplit(":", 1)[0] if not host.startswith("[") else host.split("]")[0] + "]"
+        if name not in LOOPBACK_HOSTS:
+            raise Forbidden("허용되지 않은 주소예요.")
+
+    def _check_same_origin(self) -> None:
+        site = self.headers.get("Sec-Fetch-Site")
+        if site and site not in ("same-origin", "none"):
+            raise Forbidden("다른 사이트에서 온 요청은 받을 수 없어요.")
+        if self.command != "GET" and self.headers.get(CLIENT_HEADER) != "1":
+            raise Forbidden("앱 화면에서 보낸 요청이 아니에요.")
+
+    def _drain(self) -> None:
+        length = int(self.headers.get("Content-Length") or 0)
+        if 0 < length <= MAX_UPLOAD and not getattr(self, "_body_read", False):
+            self.rfile.read(length)
+            self._body_read = True
+
+    def _api(self, path: str, query: dict[str, str]) -> Response:
+        self._check_same_origin()
+        length = int(self.headers.get("Content-Length") or 0)
+        if length > MAX_UPLOAD:
+            self.close_connection = True
+            raise InvalidInput("파일이 너무 커요.")
+        body = self.rfile.read(length) if length else b""
+        self._body_read = True
+        handler, params = self.server.router.resolve(self.command, path)
+        return handler(Request(self.command, path, query, self.headers, body, params))
+
+    def _static(self, path: str) -> Response:
+        if self.command != "GET":
+            raise NotFound("없는 주소예요.")
+        if path in APP_ROUTES:
+            path = "/index.html"
+        target = (self.server.static_dir / path.lstrip("/")).resolve()
+        if self.server.static_dir not in target.parents or not target.is_file():
+            raise NotFound("없는 파일이에요.")
+        kind = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+        if target.suffix == ".mjs":
+            kind = "text/javascript"
+        if kind.startswith("text/") or kind.endswith("javascript"):
+            kind += "; charset=utf-8"
+        return Response.send_file(target, kind, {"Cache-Control": "no-cache"})
+
+    def _send(self, response: Response) -> None:
+        size = response.file.stat().st_size if response.file else len(response.body)
+        self.send_response(response.status)
+        self.send_header("Content-Type", response.content_type)
+        self.send_header("Content-Length", str(size))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Content-Security-Policy",
+                         "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; "
+                         "worker-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; object-src 'none'")
+        for key, value in response.headers.items():
+            self.send_header(key, value)
+        self.end_headers()
+        if response.file:
+            with response.file.open("rb") as stream:
+                shutil.copyfileobj(stream, self.wfile)
+        else:
+            self.wfile.write(response.body)
+
+
+def create_server(app: Application, host: str = "127.0.0.1", port: int = 0) -> PaperdeskServer:
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        raise ValueError("보안을 위해 이 컴퓨터(127.0.0.1)에서만 열 수 있어요.")
+    return PaperdeskServer((host, port), app)
+
