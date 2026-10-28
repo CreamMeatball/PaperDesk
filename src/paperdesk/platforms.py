@@ -7,12 +7,15 @@ not hunting through the codebase.
 from __future__ import annotations
 
 import os
+import re
 import shutil
+import subprocess
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
 
 from . import APP_ID, APP_NAME
+from .config import environment_language, language_name
 from .infrastructure.secrets import FileSecretStore, KeychainSecretStore
 from .ports.secrets import SecretStore
 
@@ -34,6 +37,10 @@ class Platform(ABC):
     def extra_bin_dirs(self) -> tuple[str, ...]:
         return ()
 
+    def preferred_language(self) -> str:
+        """Default answer/translation language on first run (the user can change it in settings)."""
+        return environment_language() or "English"
+
 
 class MacPlatform(Platform):
     name = "macos"
@@ -50,6 +57,22 @@ class MacPlatform(Platform):
 
     def extra_bin_dirs(self) -> tuple[str, ...]:
         return ("/opt/homebrew/bin", "/usr/local/bin")
+
+    def preferred_language(self) -> str:
+        # The language chosen in System Settings. Terminal's LANG often differs, and GUI launches may have none.
+        for code in self.apple_languages():
+            name = language_name(code)
+            if name:
+                return name
+        return super().preferred_language()
+
+    @staticmethod
+    def apple_languages() -> list[str]:
+        try:
+            done = subprocess.run(["defaults", "read", "-g", "AppleLanguages"], capture_output=True, text=True, timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            return []
+        return re.findall(r'"?([A-Za-z]{2,3}(?:-[A-Za-z0-9]+)*)"?\s*[,)\n]', done.stdout) if done.returncode == 0 else []
 
 
 class WindowsPlatform(Platform):

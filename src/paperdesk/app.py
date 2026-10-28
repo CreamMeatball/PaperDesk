@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .config import AppPaths, system_language
+from .config import AppPaths
 from .infrastructure.blobs import FileBlobStore
 from .infrastructure.settings_store import JsonSettingsStore
 from .infrastructure.sqlite import (Database, SqliteCompletionCache, SqliteDocumentRepository, SqliteFolderRepository,
@@ -42,7 +42,7 @@ class Application:
         folders = FolderService(SqliteFolderRepository(database), documents)
         library = LibraryService(documents, FileBlobStore(paths.blobs), SqlitePageTextRepository(database), folders)
         settings = SettingsService(
-            store=settings_store or JsonSettingsStore(paths.settings_file, Settings(target_language=system_language())),
+            store=settings_store or JsonSettingsStore(paths.settings_file, Settings(target_language=platform.preferred_language())),
             secrets=secrets or platform.secret_store(paths.root),
             registry=registry or default_registry(),
             runner=runner or SubprocessRunner(),

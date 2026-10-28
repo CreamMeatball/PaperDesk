@@ -49,11 +49,24 @@ class AppPaths:
         return self
 
 
-def system_language() -> str:
+def language_name(code: str | None) -> str | None:
+    """'ko-KR', 'ko_KR.UTF-8', 'zh-Hans' -> display name used in prompts, or None if unknown."""
+    if not code:
+        return None
+    return LANGUAGES.get(code.replace("_", "-").split("-")[0].split(".")[0].lower())
+
+
+def environment_language() -> str | None:
+    """POSIX locale variables, skipping the neutral C/POSIX locale."""
     for name in ("LC_ALL", "LC_MESSAGES", "LANG"):
         value = os.environ.get(name, "")
         if value and value not in ("C", "POSIX") and not value.startswith("C."):
-            return LANGUAGES.get(value[:2].lower(), "English")
-    code = (locale.getlocale()[0] or "en")[:2].lower()
-    return LANGUAGES.get(code, "English")
+            return language_name(value)
+    return language_name(locale.getlocale()[0])
+
+
+def system_language() -> str:
+    from .platforms import current_platform
+
+    return current_platform().preferred_language()
 
