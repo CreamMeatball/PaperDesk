@@ -1,9 +1,11 @@
 import { h, icon, iconButton, toast, MOD } from "./ui.js";
+import { renderMarkdown } from "./markdown.js";
 
-var TASK_LABEL = { translate: "번역", explain: "설명", ask: "질문", summarize: "요약" };
-var MAX_TURNS = 60;
+var TASK_LABEL = { translate: "번역", explain: "설명", ask: "질문", summarize: "요약", define: "뜻", figure: "그림 설명", equation: "수식 설명", region: "영역 설명" };
+var MAX_TURNS = 80, PAPER_LIMIT = 60000;
+var TABS = [["chat", "대화"], ["digest", "요약"], ["notes", "메모"]];
 
-// Right-hand panel: a per-paper thread of translations, explanations and questions, with a composer.
+// Right-hand panel: per-paper conversation, paper digest (3-line summary, key terms, full summary) and highlights/notes.
 export class AssistantPanel {
   constructor(root, app) {
     this.root = root;
@@ -11,15 +13,22 @@ export class AssistantPanel {
     this.reader = null;
     this.turns = [];
     this.quoted = null;
+    this.tab = "chat";
+    this.digest = {};
     var self = this;
     app.settings.addEventListener("change", function () { if (self.reader) self.renderHead(); });
   }
 
   attach(reader) {
+    if (this.unsubscribe) this.unsubscribe();
+    this.unsubscribe = null;
     this.reader = reader;
     this.quoted = null;
+    this.digest = {};
     if (!reader) { this.root.replaceChildren(); return; }
     this.turns = this.loadTurns(reader.id);
+    var self = this;
+    this.unsubscribe = reader.annotations.onChange(function () { if (self.tab === "notes") self.renderBody(); });
     this.build();
   }
 
@@ -29,14 +38,16 @@ export class AssistantPanel {
   }
   saveTurns() {
     if (!this.reader) return;
-    var done = this.turns.filter(function (t) { return t.status !== "pending"; }).slice(-MAX_TURNS);
+    var done = this.turns.filter(function (t) { return t.status !== "pending"; }).slice(-MAX_TURNS)
+      .map(function (t) { var copy = Object.assign({}, t); delete copy.thumb; return copy; });
     try { localStorage.setItem(this.storageKey(this.reader.id), JSON.stringify(done)); } catch (error) {}
   }
 
   build() {
     var self = this;
     this.head = h("div", { class: "as-head" });
-    this.thread = h("div", { class: "thread" });
+    this.tabs = h("div", { class: "seg as-tabs" });
+    this.body = h("div", { class: "as-body" });
     this.ctx = h("div", { class: "ctx" });
     this.input = h("textarea", { rows: "2", placeholder: "이 논문에 대해 물어보세요",
       oninput: function () { self.autosize(); self.sendButton.disabled = !self.input.value.trim(); },
@@ -44,15 +55,34 @@ export class AssistantPanel {
         if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); self.submit(); }
       } });
     this.sendButton = h("button", { class: "send", title: "보내기", disabled: true, onclick: function () { self.submit(); } }, icon("send", 14));
-    var quick = h("div", { class: "quick" },
-      h("button", { class: "btn small", onclick: function () { self.summarize(); } }, icon("sparkle", 13), "논문 요약"),
-      h("button", { class: "btn small", onclick: function () { self.translatePage(); } }, icon("translate", 13), "현재 쪽 번역"));
-    this.root.replaceChildren(this.head, this.thread, quick,
-      h("div", { class: "composer" }, this.ctx, this.input,
-        h("div", { class: "row" }, h("span", { class: "hint" }, "⏎ 보내기 · ⇧⏎ 줄바꿈 · 글을 선택하면 T/E/Q"), this.sendButton)));
+    this.composer = h("div", { class: "composer" }, this.ctx, this.input,
+      h("div", { class: "row" }, h("span", { class: "hint" }, "⏎ 보내기 · ⇧⏎ 줄바꿈 · 글 선택 후 T·E·W·Q·H·C"), this.sendButton));
+    this.root.replaceChildren(this.head, this.tabs, this.body, this.composer);
     this.renderHead();
     this.renderContext();
-    this.renderThread();
+    this.showTab(this.tab);
+  }
+
+  showTab(tab) {
+    this.tab = tab;
+    if (!this.reader) return;
+    var self = this;
+    this.app.showAssistant();
+    this.tabs.replaceChildren.apply(this.tabs, TABS.map(function (t) {
+      return h("button", { class: t[0] === tab ? "on" : "", onclick: function () { self.showTab(t[0]); } }, t[1]);
+    }));
+    this.composer.hidden = tab !== "chat";
+    this.renderBody();
+  }
+
+  renderBody() {
+    if (this.tab === "chat") this.renderThread();
+    else if (this.tab === "digest") this.renderDigest();
+    else {
+      var box = h("div", { class: "thread notes" });
+      this.body.replaceChildren(box);
+      this.reader.annotations.renderList(box);
+    }
   }
 
   renderHead() {
@@ -62,7 +92,7 @@ export class AssistantPanel {
       h("button", { class: "provider-pill", title: "AI 연결 바꾸기", onclick: function () { app.router.go("/settings"); } },
         h("i", { class: "dot " + (active ? (active.available ? "ok" : "bad") : "") }),
         h("span", null, active ? active.label : "AI 연결 안 됨")),
-      this.turns.length ? iconButton("trash", "대화 지우기", function () { self.turns = []; self.saveTurns(); self.renderThread(); }) : null,
+      this.turns.length && this.tab === "chat" ? iconButton("trash", "대화 지우기", function () { self.turns = []; self.saveTurns(); self.renderThread(); self.renderHead(); }) : null,
       iconButton("close", "패널 닫기 (" + MOD + "J)", function () { app.toggleAssistant(); })].filter(Boolean));
   }
 
@@ -70,34 +100,41 @@ export class AssistantPanel {
     var self = this;
     if (!this.quoted) { this.ctx.replaceChildren(); this.ctx.style.display = "none"; return; }
     this.ctx.style.display = "";
-    this.ctx.replaceChildren(icon("question", 13), h("span", null, "“" + this.quoted.text + "”"),
+    this.ctx.replaceChildren(this.quoted.image ? h("img", { class: "ctx-thumb", src: this.quoted.image, alt: "" }) : icon("question", 13),
+      h("span", null, "“" + this.quoted.text + "”"),
       iconButton("close", "인용 빼기", function () { self.quoted = null; self.renderContext(); }));
   }
 
+  // ---------- conversation ----------
   renderThread() {
     var self = this;
+    var quick = h("div", { class: "quick" },
+      h("button", { class: "btn small", onclick: function () { self.showTab("digest"); } }, icon("sparkle", 13), "논문 요약 보기"),
+      h("button", { class: "btn small", onclick: function () { self.translatePage(); } }, icon("translate", 13), "현재 쪽 번역(대화)"));
     if (!this.turns.length) {
-      this.thread.replaceChildren(h("div", { class: "as-empty" },
+      this.body.replaceChildren(h("div", { class: "thread" }, h("div", { class: "as-empty" },
         h("b", null, "읽다가 막히는 곳을 물어보세요"),
-        "PDF에서 글을 선택하면 번역·설명·질문을 할 수 있어요. 대화는 이 논문마다 따로 저장돼요."));
+        "글을 선택해 번역·설명·뜻을 묻거나, 그림·수식 위에 마우스를 올려 설명을 요청하세요. 대화는 논문마다 따로 저장돼요.")), quick);
       return;
     }
-    this.thread.replaceChildren.apply(this.thread, this.turns.map(function (turn) { return self.renderTurn(turn); }));
-    this.thread.scrollTop = this.thread.scrollHeight;
+    var thread = h("div", { class: "thread" }, this.turns.map(function (turn) { return self.renderTurn(turn); }));
+    this.body.replaceChildren(thread, quick);
+    thread.scrollTop = thread.scrollHeight;
   }
 
   renderTurn(turn) {
-    var self = this;
-    var answer;
+    var self = this, answer;
     if (turn.status === "pending") answer = h("div", { class: "answer" }, h("span", { class: "typing" }, h("i"), h("i"), h("i")));
     else if (turn.status === "error") {
       answer = h("div", { class: "answer error" }, turn.error,
         turn.code === "provider_unavailable" ? h("div", null, h("button", { class: "btn small", style: "margin-top:6px",
           onclick: function () { self.app.router.go("/settings"); } }, "설정에서 AI 연결하기")) : null);
-    } else answer = h("div", { class: "answer" }, turn.answer);
+    } else answer = renderMarkdown(h("div", { class: "answer md" }), turn.answer);
     return h("div", { class: "turn" },
       turn.question ? h("div", { class: "ask" }, turn.question) : null,
-      h("div", { class: "task" }, TASK_LABEL[turn.task] || turn.task, turn.page ? "· " + turn.page + "쪽" : null),
+      h("div", { class: "task" }, turn.label || TASK_LABEL[turn.task] || turn.task,
+        turn.page ? h("button", { class: "link-btn", onclick: function () { self.reader && self.reader.goToPage(turn.page); } }, "· " + turn.page + "쪽") : null),
+      turn.thumb ? h("img", { class: "turn-thumb", src: turn.thumb, alt: "" }) : null,
       turn.quote ? h("div", { class: "quote" }, turn.quote) : null,
       answer,
       turn.status === "done" ? h("div", { class: "meta" },
@@ -112,7 +149,7 @@ export class AssistantPanel {
 
   quote(info) {
     if (!info) return;
-    this.app.showAssistant();
+    this.showTab("chat");
     this.quoted = info;
     this.renderContext();
     this.input.focus();
@@ -120,8 +157,16 @@ export class AssistantPanel {
 
   runOnSelection(task, info) {
     if (!info) return;
-    this.app.showAssistant();
-    this.run({ task: task, text: info.text, context: this.reader.pageText(info.page).slice(0, 6000), quote: info.text, page: info.page });
+    this.showTab("chat");
+    var context = this.reader.pageText(info.page).slice(0, 6000);
+    this.run({ task: task, text: info.text, context: context, quote: info.text, page: info.page });
+  }
+
+  runVisual(options) {
+    this.showTab("chat");
+    this.run({ task: options.task, text: options.text || "", context: options.context || "", images: options.images || [],
+      label: options.label + " " + TASK_LABEL[options.task].replace(/^.+ /, ""), page: options.page, thumb: options.thumb,
+      quote: options.task === "region" && options.text ? options.text.slice(0, 200) : "" });
   }
 
   submit() {
@@ -133,20 +178,16 @@ export class AssistantPanel {
     this.sendButton.disabled = true;
     this.quoted = null;
     this.renderContext();
-    if (quoted) {
+    if (quoted && quoted.image) {
+      this.run({ task: "region", text: quoted.text, question: question, images: [quoted.image], thumb: quoted.image, page: quoted.page,
+        context: this.reader.pageText(quoted.page).slice(0, 4000) });
+    } else if (quoted) {
       this.run({ task: "ask", text: quoted.text, question: question, context: this.reader.pageText(quoted.page).slice(0, 6000), quote: quoted.text, page: quoted.page });
     } else {
-      var page = this.reader.current;
       var text = this.reader.paperText(50000);
       if (!text) { toast("본문을 아직 읽는 중이에요. 잠시 후 다시 물어보세요.", true); return; }
-      this.run({ task: "ask", text: text, question: question, page: null });
+      this.run({ task: "ask", text: text, question: question });
     }
-  }
-
-  summarize() {
-    var text = this.reader && this.reader.paperText(55000);
-    if (!text) { toast("본문을 아직 읽는 중이에요.", true); return; }
-    this.run({ task: "summarize", text: text });
   }
 
   translatePage() {
@@ -156,14 +197,16 @@ export class AssistantPanel {
   }
 
   async run(request) {
-    var reader = this.reader, self = this;
-    var turn = { task: request.task, question: request.question || "", quote: request.quote || "", page: request.page || null, status: "pending" };
+    var reader = this.reader;
+    var turn = { task: request.task, question: request.question || "", quote: request.quote || "", page: request.page || null,
+      label: request.label || "", thumb: request.thumb || null, status: "pending" };
     this.turns.push(turn);
-    this.renderThread();
+    if (this.tab === "chat") this.renderThread();
     this.renderHead();
     try {
       var result = await this.app.api.post("/api/assist", {
-        task: request.task, text: request.text, question: request.question || "", context: request.context || ""
+        task: request.task, text: request.text, question: request.question || "", context: request.context || "",
+        title: reader.title(), images: request.images || []
       });
       turn.status = "done";
       turn.answer = result.text;
@@ -177,13 +220,83 @@ export class AssistantPanel {
     }
     if (this.reader !== reader) return; // user switched papers while waiting
     this.saveTurns();
-    this.renderThread();
+    if (this.tab === "chat") this.renderThread();
   }
 
   providerLabel(id) {
     var data = this.app.settings.data;
     var found = data && data.providers.find(function (p) { return p.id === id; });
     return found ? found.label : id;
+  }
+
+  // ---------- digest: 3-line summary, key terms, full summary ----------
+  onAnalysis() {
+    this.digest = {};
+    this.loadDigest(true);
+  }
+
+  digestRequest(task) {
+    return { task: task, text: this.reader.paperText(PAPER_LIMIT), title: this.reader.title() };
+  }
+
+  async loadDigest(cacheOnly, only) {
+    if (!this.reader || !this.reader.analysis) return;
+    var reader = this.reader, self = this;
+    var tasks = only ? [only] : ["tldr", "keywords", "summarize"];
+    await Promise.all(tasks.map(async function (task) {
+      if (!cacheOnly) self.digest[task] = { status: "pending" };
+      if (self.tab === "digest") self.renderDigest();
+      try {
+        var result = await self.app.api.post("/api/assist", Object.assign(self.digestRequest(task), { cache_only: cacheOnly }));
+        if (reader !== self.reader) return;
+        self.digest[task] = result ? { status: "done", text: result.text, provider: self.providerLabel(result.provider_id), model: result.model } : null;
+      } catch (error) {
+        if (!cacheOnly) self.digest[task] = { status: "error", text: error.message };
+      }
+    }));
+    if (this.tab === "digest") this.renderDigest();
+  }
+
+  keyTerms() {
+    var entry = this.digest.keywords;
+    if (!entry || entry.status !== "done") return "";
+    var terms = this.parseTerms(entry.text);
+    return terms ? terms.map(function (t) { return t.term; }).join(", ") : "";
+  }
+
+  parseTerms(text) {
+    try {
+      var start = text.indexOf("{"), end = text.lastIndexOf("}");
+      var data = JSON.parse(text.slice(start, end + 1));
+      return Array.isArray(data.terms) ? data.terms.filter(function (t) { return t && t.term; }) : null;
+    } catch (error) { return null; }
+  }
+
+  renderDigest() {
+    var self = this, reader = this.reader;
+    if (!reader.analysis) {
+      this.body.replaceChildren(h("div", { class: "thread" }, h("div", { class: "as-empty" }, "본문을 읽는 중이에요…")));
+      return;
+    }
+    function section(task, title, empty, render) {
+      var entry = self.digest[task], content;
+      if (!entry) content = h("button", { class: "btn small", onclick: function () { self.loadDigest(false, task); } }, icon("sparkle", 13), empty);
+      else if (entry.status === "pending") content = h("span", { class: "typing" }, h("i"), h("i"), h("i"));
+      else if (entry.status === "error") content = h("div", null, h("div", { class: "error-text" }, entry.text),
+        h("button", { class: "btn small", onclick: function () { self.loadDigest(false, task); } }, "다시 시도"));
+      else content = h("div", null, render(entry.text), h("div", { class: "meta" }, [entry.provider, entry.model].filter(Boolean).join(" · ")));
+      return h("section", { class: "digest-part" }, h("h3", null, title), content);
+    }
+    var parts = h("div", { class: "thread digest" },
+      section("tldr", "3줄 요약", "3줄 요약 만들기", function (text) { return renderMarkdown(h("div", { class: "md tldr" }), text); }),
+      section("keywords", "핵심 용어", "핵심 용어 정리", function (text) {
+        var terms = self.parseTerms(text);
+        if (!terms) return renderMarkdown(h("div", { class: "md" }), text);
+        return h("dl", { class: "terms" }, terms.map(function (t) { return [h("dt", null, t.term), h("dd", null, t.meaning || "")]; }));
+      }),
+      section("summarize", "전체 요약", "전체 요약 만들기", function (text) { return renderMarkdown(h("div", { class: "md" }), text); }),
+      h("p", { class: "fine" }, "요약은 참고문헌을 뺀 본문으로 만들고, 한 번 만든 결과는 이 컴퓨터에 저장돼 다시 비용이 들지 않아요."));
+    this.body.replaceChildren(parts);
   }
 }
 

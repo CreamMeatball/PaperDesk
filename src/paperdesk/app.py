@@ -7,12 +7,15 @@ from dataclasses import dataclass
 from .config import AppPaths
 from .infrastructure.blobs import FileBlobStore
 from .infrastructure.downloads import UrllibDownloader
+from .infrastructure.scholarly import ArxivIndex, CompositeIndex, OpenAlexIndex
 from .infrastructure.settings_store import JsonSettingsStore
 from .infrastructure.sqlite import (Database, SqliteCompletionCache, SqliteDocumentRepository, SqliteFolderRepository,
-                                    SqlitePageTextRepository, SqliteReadingListRepository)
+                                    SqliteAnnotationRepository, SqlitePageTextRepository, SqliteReadingListRepository,
+                                    SqliteTranslationRepository)
 from .platforms import Platform, current_platform
 from .ports.ai import CommandRunner, HttpClient
 from .ports.downloads import FileDownloader
+from .ports.scholarly import ScholarlyIndex
 from .ports.secrets import SecretStore
 from .ports.settings import Settings, SettingsStore
 from .providers.registry import ProviderRegistry, default_registry
@@ -20,7 +23,10 @@ from .providers.transport import SubprocessRunner, UrllibHttpClient
 from .services.assistant import AssistantService
 from .services.library import FolderService, LibraryService
 from .services.prompts import PromptBuilder
+from .services.annotations import AnnotationService
 from .services.reading_list import ReadingListService
+from .services.reference_notes import ReferenceNoteService
+from .services.translation import TranslationService
 from .services.settings import SettingsService
 
 
@@ -33,12 +39,16 @@ class Application:
     assistant: AssistantService
     settings: SettingsService
     reading: ReadingListService
+    annotations: AnnotationService
+    translations: TranslationService
+    reference_notes: ReferenceNoteService
 
     @classmethod
     def build(cls, paths: AppPaths | None = None, *, secrets: SecretStore | None = None,
               settings_store: SettingsStore | None = None, registry: ProviderRegistry | None = None,
               runner: CommandRunner | None = None, http: HttpClient | None = None,
-              platform: Platform | None = None, downloader: FileDownloader | None = None) -> "Application":
+              platform: Platform | None = None, downloader: FileDownloader | None = None,
+              scholarly: ScholarlyIndex | None = None) -> "Application":
         platform = platform or current_platform()
         paths = (paths or AppPaths.default()).ensure()
         database = Database(paths.database)
@@ -52,8 +62,14 @@ class Application:
             runner=runner or SubprocessRunner(),
             http=http or UrllibHttpClient(),
         )
-        assistant = AssistantService(active_provider=settings.active_provider, prompts=PromptBuilder(),
-                                     cache=SqliteCompletionCache(database))
-        reading = ReadingListService(SqliteReadingListRepository(database), library, downloader or UrllibDownloader())
-        return cls(paths, platform, library, folders, assistant, settings, reading)
+        cache = SqliteCompletionCache(database)
+        assistant = AssistantService(active_provider=settings.active_provider, prompts=PromptBuilder(), cache=cache)
+        downloader = downloader or UrllibDownloader()
+        scholarly = scholarly or CompositeIndex([ArxivIndex(downloader), OpenAlexIndex(downloader)])
+        reading = ReadingListService(SqliteReadingListRepository(database), library, downloader, index=scholarly)
+        annotations = AnnotationService(SqliteAnnotationRepository(database), library)
+        translations = TranslationService(SqliteTranslationRepository(database), assistant, library,
+                                          language=lambda: settings.load().target_language)
+        notes = ReferenceNoteService(scholarly, assistant, cache)
+        return cls(paths, platform, library, folders, assistant, settings, reading, annotations, translations, notes)
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from ..domain.models import Document, Folder, ReadingItem
+from ..domain.models import Annotation, BlockTranslation, Document, Folder, ReadingItem
 
 
 class DocumentRepository(ABC):
@@ -75,6 +75,31 @@ class PageTextRepository(ABC):
     @abstractmethod
     def search(self, query: str, limit: int) -> list[tuple[str, int, str]]:
         """Return (doc_id, page_number, snippet)."""
+
+
+class AnnotationRepository(ABC):
+    @abstractmethod
+    def add(self, annotation: Annotation) -> None: ...
+
+    @abstractmethod
+    def get(self, annotation_id: str) -> Annotation | None: ...
+
+    @abstractmethod
+    def list(self, doc_id: str) -> list[Annotation]: ...
+
+    @abstractmethod
+    def update(self, annotation: Annotation) -> None: ...
+
+    @abstractmethod
+    def delete(self, annotation_id: str) -> None: ...
+
+
+class TranslationRepository(ABC):
+    @abstractmethod
+    def list(self, doc_id: str, language: str) -> list[BlockTranslation]: ...
+
+    @abstractmethod
+    def put(self, translation: BlockTranslation) -> None: ...
 
 
 class CompletionCache(ABC):

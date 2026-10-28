@@ -11,6 +11,7 @@ class AnthropicApiProvider(AIProvider):
     id = "anthropic-api"
     label = "Claude API"
     kind = "api"
+    supports_images = True
     description = "Claude Console API 키로 호출합니다. 사용량은 내 Anthropic API 계정에 청구됩니다."
     docs_url = "https://platform.claude.com/docs/en/get-api-key"
     endpoint = "https://api.anthropic.com/v1/messages"
@@ -24,6 +25,16 @@ class AnthropicApiProvider(AIProvider):
             return ProviderStatus(False, "API 키를 입력하세요 (또는 ANTHROPIC_API_KEY 환경 변수).")
         return ProviderStatus(True, "API 키 준비됨")
 
+    @staticmethod
+    def _content(prompt: Prompt):
+        if not prompt.images:
+            return prompt.user
+        import base64
+
+        blocks = [{"type": "image", "source": {"type": "base64", "media_type": image.media_type,
+                                                "data": base64.b64encode(image.data).decode()}} for image in prompt.images]
+        return blocks + [{"type": "text", "text": prompt.user}]
+
     def complete(self, prompt: Prompt) -> Completion:
         key = self.option("api_key")
         if not key:
@@ -35,7 +46,7 @@ class AnthropicApiProvider(AIProvider):
                 "model": self.model,
                 "max_tokens": 4096,
                 "system": prompt.system,
-                "messages": [{"role": "user", "content": prompt.user}],
+                "messages": [{"role": "user", "content": self._content(prompt)}],
             },
             timeout=180,
         )

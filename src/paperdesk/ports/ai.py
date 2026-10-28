@@ -88,6 +88,7 @@ class AIProvider(ABC):
     description: ClassVar[str] = ""
     docs_url: ClassVar[str] = ""
     options: ClassVar[tuple[OptionField, ...]] = ()
+    supports_images: ClassVar[bool] = False  # True when complete() forwards Prompt.images to the model
 
     def __init__(self, context: ProviderContext) -> None:
         self.context = context
@@ -131,6 +132,7 @@ class AIProvider(ABC):
             "available": state.available,
             "detail": state.detail,
             "models": list(state.models),
+            "supports_images": self.supports_images,
             "options": fields,
         }
 

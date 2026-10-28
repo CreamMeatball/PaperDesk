@@ -93,6 +93,7 @@ export class SettingsView {
     var body = h("div", { class: "provider-body" },
       h("p", { class: "desc" }, p.description, p.docs_url ? [" ", h("a", { href: p.docs_url, target: "_blank", rel: "noreferrer" }, "안내 문서")] : null),
       h("p", { class: "desc", style: "font-size:12px" }, "상태: " + p.detail),
+      p.supports_images ? null : h("p", { class: "desc", style: "font-size:12px" }, "그림·수식 설명은 이미지 없이 캡션과 본문 글자만 보내 설명해요."),
       p.options.length ? grid : null,
       h("div", { class: "actions-row" },
         p.options.length ? h("button", { class: "btn", onclick: function () { self.save(p, inputs); } }, "저장") : null,

@@ -19,6 +19,7 @@ class CodexCliProvider(CliProvider):
     description = "내 컴퓨터에 설치·로그인된 Codex CLI(codex exec)를 실행합니다. Codex 로그인(ChatGPT 요금제 또는 API 키) 사용량으로 처리됩니다."
     docs_url = "https://developers.openai.com/codex/noninteractive"
     executable = "codex"
+    supports_images = True
     extra_dirs = ("/Applications/Codex.app/Contents/Resources",)
     login_args = ("login", "status")
     options = (
@@ -43,6 +44,10 @@ class CodexCliProvider(CliProvider):
         ]
         if self.model:
             argv += ["--model", self.model]
+        for number, image in enumerate(prompt.images, start=1):
+            path_ = workdir / f"image-{number}.{'jpg' if image.media_type == 'image/jpeg' else 'png'}"
+            path_.write_bytes(image.data)
+            argv.append(f"--image={path_}")  # '=' form: --image takes several values and would swallow '-'
         argv.append("-")  # prompt comes from stdin
         return argv
 

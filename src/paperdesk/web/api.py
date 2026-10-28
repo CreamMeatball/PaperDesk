@@ -5,7 +5,10 @@ from urllib.parse import unquote
 from .. import APP_ID, __version__
 from ..app import Application
 from ..domain.errors import InvalidInput
-from ..domain.models import AssistRequest, AssistTask
+import base64
+import re
+
+from ..domain.models import AssistRequest, AssistTask, ImageInput
 from .http import Request, Response, Router
 
 MAX_UPLOAD = 210 * 1024 * 1024
@@ -38,6 +41,14 @@ class ApiController:
             ("POST", "/api/reading-list/{item_id}/arxiv", self.reading_from_arxiv),
             ("POST", "/api/reading-list/{item_id}/pdf", self.reading_attach_pdf),
             ("POST", "/api/assist", self.assist),
+            ("GET", "/api/documents/{doc_id}/annotations", self.annotations),
+            ("POST", "/api/documents/{doc_id}/annotations", self.add_annotation),
+            ("PATCH", "/api/annotations/{annotation_id}", self.update_annotation),
+            ("DELETE", "/api/annotations/{annotation_id}", self.delete_annotation),
+            ("GET", "/api/documents/{doc_id}/translations", self.translations),
+            ("POST", "/api/documents/{doc_id}/translations", self.translate_blocks),
+            ("POST", "/api/references/explain", self.explain_reference),
+            ("POST", "/api/reading-list/{item_id}/find-arxiv", self.reading_find_arxiv),
             ("GET", "/api/settings", self.settings),
             ("PUT", "/api/settings", self.update_settings),
             ("PUT", "/api/providers/{provider_id}", self.update_provider),
@@ -148,21 +159,79 @@ class ApiController:
                                                      request.body, folder)
         return Response.json({"item": item.to_dict(), "document": document.to_dict()})
 
+    @staticmethod
+    def _images(raw) -> tuple[ImageInput, ...]:
+        if not raw:
+            return ()
+        if not isinstance(raw, list) or len(raw) > 2:
+            raise InvalidInput("이미지는 두 장까지 보낼 수 있어요.")
+        images = []
+        for url in raw:
+            found = re.fullmatch(r"data:(image/(?:png|jpeg));base64,([A-Za-z0-9+/=]+)", str(url))
+            if not found:
+                raise InvalidInput("이미지 형식이 올바르지 않아요.")
+            data = base64.b64decode(found.group(2))
+            if not (data.startswith(b"\x89PNG") or data.startswith(b"\xff\xd8")):
+                raise InvalidInput("이미지 형식이 올바르지 않아요.")
+            images.append(ImageInput(found.group(1), data))
+        return tuple(images)
+
     def assist(self, request: Request) -> Response:
         data = request.json()
         try:
             task = AssistTask(data.get("task", ""))
         except ValueError:
             raise InvalidInput("알 수 없는 작업이에요.") from None
+        if task in (AssistTask.TRANSLATE_BLOCKS, AssistTask.REFERENCE):
+            raise InvalidInput("이 작업은 전용 주소를 쓰세요.")
         settings = self.app.settings.load()
         completion = self.app.assistant.run(AssistRequest(
             task=task,
             text=str(data.get("text", "")),
-            question=str(data.get("question", "")),
-            context=str(data.get("context", ""))[:8000],
+            question=str(data.get("question", ""))[:4000],
+            context=str(data.get("context", ""))[:12000],
             target_language=settings.target_language,
-        ))
-        return Response.json(completion.to_dict())
+            title=str(data.get("title", ""))[:300],
+            images=self._images(data.get("images")),
+        ), cache_only=bool(data.get("cache_only")))
+        return Response.json(completion.to_dict() if completion else None)
+
+    def annotations(self, request: Request) -> Response:
+        return Response.json({"annotations": [a.to_dict() for a in self.app.annotations.list(request.params["doc_id"])]})
+
+    def add_annotation(self, request: Request) -> Response:
+        data = request.json()
+        page = data.get("page")
+        annotation = self.app.annotations.add(request.params["doc_id"], page=page if isinstance(page, int) else -1,
+                                              kind=str(data.get("kind", "highlight")), color=str(data.get("color", "yellow")),
+                                              text=str(data.get("text", "")), rects=data.get("rects"), note=str(data.get("note", "")))
+        return Response.json({"annotation": annotation.to_dict()}, 201)
+
+    def update_annotation(self, request: Request) -> Response:
+        data = request.json()
+        annotation = self.app.annotations.update(request.params["annotation_id"], color=data.get("color"), note=data.get("note"))
+        return Response.json({"annotation": annotation.to_dict()})
+
+    def delete_annotation(self, request: Request) -> Response:
+        self.app.annotations.delete(request.params["annotation_id"])
+        return Response.json({"ok": True})
+
+    def translations(self, request: Request) -> Response:
+        return Response.json(self.app.translations.list(request.params["doc_id"]))
+
+    def translate_blocks(self, request: Request) -> Response:
+        data = request.json()
+        blocks = self.app.translations.parse_blocks(data.get("blocks"))
+        return Response.json(self.app.translations.translate(request.params["doc_id"], blocks, title=str(data.get("title", ""))[:300],
+                                                             section=str(data.get("section", ""))[:200], terms=str(data.get("terms", ""))[:600]))
+
+    def explain_reference(self, request: Request) -> Response:
+        data = request.json()
+        return Response.json(self.app.reference_notes.explain(str(data.get("citation", "")), language=self.app.settings.load().target_language,
+                                                              cache_only=bool(data.get("cache_only"))))
+
+    def reading_find_arxiv(self, request: Request) -> Response:
+        return Response.json({"item": self.app.reading.find_arxiv(request.params["item_id"]).to_dict()})
 
     def settings(self, request: Request) -> Response:
         return Response.json(self.app.settings.view())

@@ -22,6 +22,7 @@ def server_options(default_base_url: str, *, key_help: str) -> tuple[OptionField
 
 class OpenAICompatibleProvider(AIProvider):
     kind = "local-server"
+    supports_images = True  # vision models only; AssistantService retries without images if the server refuses
     default_base_url: ClassVar[str] = "http://localhost:8000/v1"
     probe_timeout: ClassVar[float] = 2.0
     timeout: ClassVar[float] = 600
@@ -49,6 +50,13 @@ class OpenAICompatibleProvider(AIProvider):
         note = "" if chosen in models else " (서버 목록에 없는 모델 이름)"
         return ProviderStatus(True, f"{self.base_url} · {chosen}{note}", tuple(models))
 
+    @staticmethod
+    def _content(prompt: Prompt):
+        if not prompt.images:
+            return prompt.user
+        return [{"type": "text", "text": prompt.user}] + [
+            {"type": "image_url", "image_url": {"url": image.data_url}} for image in prompt.images]
+
     def complete(self, prompt: Prompt) -> Completion:
         model = self.model
         if not model:
@@ -64,7 +72,7 @@ class OpenAICompatibleProvider(AIProvider):
             headers=self._headers(),
             body={
                 "model": model,
-                "messages": [{"role": "system", "content": prompt.system}, {"role": "user", "content": prompt.user}],
+                "messages": [{"role": "system", "content": prompt.system}, {"role": "user", "content": self._content(prompt)}],
                 "stream": False,
             },
             timeout=self.timeout,

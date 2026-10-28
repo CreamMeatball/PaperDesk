@@ -8,8 +8,11 @@ from typing import Iterator
 
 from dataclasses import fields
 
-from ..domain.models import Document, Folder, ReadingItem
-from ..ports.repositories import CompletionCache, DocumentRepository, FolderRepository, PageTextRepository, ReadingListRepository
+import json
+
+from ..domain.models import Annotation, BlockTranslation, Document, Folder, ReadingItem
+from ..ports.repositories import (AnnotationRepository, CompletionCache, DocumentRepository, FolderRepository, PageTextRepository,
+                                  ReadingListRepository, TranslationRepository)
 
 # Append-only. Each entry upgrades the schema by one version (tracked in PRAGMA user_version).
 MIGRATIONS: tuple[str, ...] = (
@@ -59,6 +62,32 @@ MIGRATIONS: tuple[str, ...] = (
         source_doc_id TEXT REFERENCES documents(id) ON DELETE SET NULL,
         document_id TEXT REFERENCES documents(id) ON DELETE SET NULL,
         note TEXT NOT NULL DEFAULT ''
+    );
+    """,
+    """
+    CREATE TABLE annotations (
+        id TEXT PRIMARY KEY,
+        doc_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+        page INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        color TEXT NOT NULL,
+        text TEXT NOT NULL,
+        rects TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        note TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX annotations_doc ON annotations(doc_id, page);
+    CREATE TABLE block_translations (
+        doc_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+        block_key TEXT NOT NULL,
+        language TEXT NOT NULL,
+        source_hash TEXT NOT NULL,
+        text TEXT NOT NULL,
+        sentences TEXT,
+        provider_id TEXT NOT NULL,
+        model TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (doc_id, block_key, language)
     );
     """,
 )
@@ -200,6 +229,62 @@ class SqliteReadingListRepository(ReadingListRepository):
     def delete(self, item_id: str) -> None:
         with self._db.connect() as db:
             db.execute("DELETE FROM reading_items WHERE id = ?", (item_id,))
+
+
+class SqliteAnnotationRepository(AnnotationRepository):
+    COLUMNS = ("id", "doc_id", "page", "kind", "color", "text", "rects", "created_at", "note")
+
+    def __init__(self, database: Database) -> None:
+        self._db = database
+
+    def _row(self, row: sqlite3.Row) -> Annotation:
+        data = {k: row[k] for k in self.COLUMNS}
+        data["rects"] = tuple(tuple(r) for r in json.loads(data["rects"]))
+        return Annotation(**data)
+
+    def _values(self, a: Annotation) -> dict:
+        return {**{k: getattr(a, k) for k in self.COLUMNS}, "rects": json.dumps([list(r) for r in a.rects])}
+
+    def add(self, annotation: Annotation) -> None:
+        with self._db.connect() as db:
+            db.execute(f"INSERT INTO annotations ({', '.join(self.COLUMNS)}) VALUES ({', '.join(':' + c for c in self.COLUMNS)})", self._values(annotation))
+
+    def get(self, annotation_id: str) -> Annotation | None:
+        with self._db.connect() as db:
+            row = db.execute(f"SELECT {', '.join(self.COLUMNS)} FROM annotations WHERE id = ?", (annotation_id,)).fetchone()
+        return self._row(row) if row else None
+
+    def list(self, doc_id: str) -> list[Annotation]:
+        with self._db.connect() as db:
+            rows = db.execute(f"SELECT {', '.join(self.COLUMNS)} FROM annotations WHERE doc_id = ? ORDER BY page, created_at", (doc_id,)).fetchall()
+        return [self._row(r) for r in rows]
+
+    def update(self, annotation: Annotation) -> None:
+        with self._db.connect() as db:
+            db.execute("UPDATE annotations SET kind = :kind, color = :color, note = :note WHERE id = :id", self._values(annotation))
+
+    def delete(self, annotation_id: str) -> None:
+        with self._db.connect() as db:
+            db.execute("DELETE FROM annotations WHERE id = ?", (annotation_id,))
+
+
+class SqliteTranslationRepository(TranslationRepository):
+    def __init__(self, database: Database) -> None:
+        self._db = database
+
+    def list(self, doc_id: str, language: str) -> list[BlockTranslation]:
+        with self._db.connect() as db:
+            rows = db.execute("SELECT * FROM block_translations WHERE doc_id = ? AND language = ?", (doc_id, language)).fetchall()
+        return [BlockTranslation(r["doc_id"], r["block_key"], r["language"], r["source_hash"], r["text"],
+                                 tuple(json.loads(r["sentences"])) if r["sentences"] else None, r["provider_id"], r["model"],
+                                 r["created_at"]) for r in rows]
+
+    def put(self, t: BlockTranslation) -> None:
+        with self._db.connect() as db:
+            db.execute("INSERT OR REPLACE INTO block_translations VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                       (t.doc_id, t.block_key, t.language, t.source_hash, t.text,
+                        json.dumps(list(t.sentences), ensure_ascii=False) if t.sentences is not None else None,
+                        t.provider_id, t.model, t.created_at))
 
 
 class SqlitePageTextRepository(PageTextRepository):

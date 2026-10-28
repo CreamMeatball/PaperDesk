@@ -9,6 +9,7 @@ from .openai_responses import ResponsesClient
 class OpenAIApiProvider(AIProvider):
     id = "openai-api"
     label = "OpenAI API"
+    supports_images = True
     kind = "api"
     description = "OpenAI Platform API 키로 호출합니다. 사용량은 내 API 계정에 청구됩니다."
     docs_url = "https://platform.openai.com/api-keys"

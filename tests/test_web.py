@@ -72,6 +72,29 @@ class WebTests(unittest.TestCase):
         status, _, _ = self.call("DELETE", "/api/reading-list/" + item["id"])
         self.assertEqual(status, 200)
 
+    def test_reader_endpoints(self):
+        _, body, _ = self.call("POST", "/api/documents", raw=make_pdf(["Reader"]), headers={"Content-Type": "application/pdf", "X-Filename": "r.pdf"})
+        doc = json.loads(body)["document"]["id"]
+        self.call("PUT", "/api/settings", {"provider": "demo"})
+        status, body, _ = self.call("POST", f"/api/documents/{doc}/annotations",
+                                    {"page": 1, "kind": "highlight", "color": "blue", "text": "x", "rects": [[0.1, 0.1, 0.2, 0.12]]})
+        self.assertEqual(status, 201)
+        ann = json.loads(body)["annotation"]["id"]
+        self.assertEqual(self.call("PATCH", f"/api/annotations/{ann}", {"note": "memo"})[0], 200)
+        _, body, _ = self.call("GET", f"/api/documents/{doc}/annotations")
+        self.assertEqual(json.loads(body)["annotations"][0]["note"], "memo")
+        status, body, _ = self.call("POST", f"/api/documents/{doc}/translations",
+                                    {"blocks": [{"key": "1:abcd1234", "sentences": ["One.", "Two."]}], "title": "T"})
+        self.assertEqual(status, 200)
+        self.assertEqual(len(json.loads(body)["blocks"]["1:abcd1234"]["sentences"]), 2)
+        png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        status, body, _ = self.call("POST", "/api/assist", {"task": "figure", "text": "Figure 1: x", "images": [png]})
+        self.assertEqual(status, 200)
+        status, _, _ = self.call("POST", "/api/assist", {"task": "figure", "text": "x", "images": ["data:text/html;base64,PGI+"]})
+        self.assertEqual(status, 400)
+        status, body, _ = self.call("POST", "/api/assist", {"task": "tldr", "text": "never asked", "cache_only": True})
+        self.assertEqual((status, json.loads(body)), (200, None))
+
     def test_rejects_requests_without_app_header(self):
         status, body, _ = self.call("POST", "/api/folders", {"name": "x"}, headers={"X-Paperdesk": "0"})
         self.assertEqual(status, 403)

@@ -1,4 +1,5 @@
 import { h, icon } from "./ui.js";
+import { renderMarkdown } from "./markdown.js";
 
 // ---------- Bibliography index (built once from pdf.js text content) ----------
 
@@ -228,44 +229,56 @@ export class CitationPreview {
     this.popover = null;
     this.onMove = this.onMove.bind(this);
     this.frame = 0;
+    var self = this;
+    reader.pagesEl.addEventListener("mousemove", this.onMove);
+    reader.pagesEl.addEventListener("mouseleave", function () { self.scheduleHide(); });
+    reader.pagesEl.addEventListener("scroll", function () { self.hide(); }, { passive: true });
   }
 
   destroy() { this.hide(true); }
 
   onMove(event) {
-    if (event.buttons || !this.reader.references || !this.reader.references.ready) return;
+    if (event.buttons || this.reader.area.active) return;
+    if (event.target.closest && event.target.closest(".tcol, .layer.over")) return; // cards handle their own refs
     var self = this, x = event.clientX, y = event.clientY, target = event.target;
     if (this.frame) return;
     this.frame = requestAnimationFrame(function () {
       self.frame = 0;
       var pageEl = target.closest && target.closest(".page");
       var hit = pageEl ? self.hitTest(pageEl, x, y) : null;
-      if (hit) self.schedule(hit, pageEl);
+      if (hit) self.schedule(hit);
       else if (!self.overPopover) self.scheduleHide();
     });
   }
 
   hitTest(pageEl, x, y) {
-    var state = this.reader.pages[Number(pageEl.dataset.page) - 1];
+    var page = Number(pageEl.dataset.page), state = this.reader.pages[page - 1];
     if (!state || !state.hotspots || !state.hotspots.length) return null;
     var box = pageEl.getBoundingClientRect(), px = (x - box.left) / box.width, py = (y - box.top) / box.height;
     var padX = 2 / box.width, padY = 2 / box.height;
     for (var i = 0; i < state.hotspots.length; i++) {
       var spot = state.hotspots[i];
       for (var j = 0; j < spot.rects.length; j++) {
-        var r = spot.rects[j];
-        if (px >= r.left - padX && px <= r.right + padX && py >= r.top - padY && py <= r.bottom + padY) {
-          return { spot: spot, rect: { left: box.left + r.left * box.width, top: box.top + r.top * box.height,
-            bottom: box.top + r.bottom * box.height } };
+        var r = spot.rects[j], left = r.left != null ? r.left : r[0], top = r.top != null ? r.top : r[1];
+        var right = r.right != null ? r.right : r[2], bottom = r.bottom != null ? r.bottom : r[3];
+        if (px >= left - padX && px <= right + padX && py >= top - padY && py <= bottom + padY) {
+          return { spot: spot, page: page, rect: { left: box.left + left * box.width, top: box.top + top * box.height, bottom: box.top + bottom * box.height } };
         }
       }
     }
     return null;
   }
 
+  // Previews for references inside translation cards (resolved by TranslationController).
+  showForElement(el, spot) {
+    if (!spot) return;
+    var row = el.closest(".page-row"), rect = el.getBoundingClientRect();
+    this.schedule({ spot: spot, page: row ? Number(row.dataset.page) : 0, rect: { left: rect.left, top: rect.top, bottom: rect.bottom }, element: el });
+  }
+
   schedule(hit) {
     clearTimeout(this.hideTimer);
-    if (this.current && this.current.spot === hit.spot) return;
+    if (this.current && (this.current.spot === hit.spot || (hit.element && this.current.element === hit.element))) return;
     var self = this;
     clearTimeout(this.showTimer);
     this.showTimer = setTimeout(function () {
@@ -276,13 +289,13 @@ export class CitationPreview {
 
   scheduleHide() {
     clearTimeout(this.showTimer);
-    if (!this.popover) return;
+    if (!this.popover) { this.current = null; return; }
     var self = this;
     clearTimeout(this.hideTimer);
     this.hideTimer = setTimeout(function () { self.hide(); }, HIDE_DELAY);
   }
 
-  hide(now) {
+  hide() {
     clearTimeout(this.showTimer);
     clearTimeout(this.hideTimer);
     if (this.popover) this.popover.remove();
@@ -292,22 +305,34 @@ export class CitationPreview {
   }
 
   show(hit) {
-    this.hide(true);
-    var self = this;
+    this.hide();
+    var self = this, content;
     this.current = hit;
-    var box = h("div", { class: "cite-pop", role: "dialog", "aria-label": "참고문헌 미리보기",
+    if (hit.spot.kind === "visual") {
+      content = this.reader.visuals.previewContent(hit.spot.target, hit.page);
+      if (!content) return; // same page: the target flashed in place
+    } else {
+      content = [hit.spot.entries.slice(0, 4).map(function (entry) { return self.renderEntry(entry, hit.spot); }),
+        hit.spot.entries.length > 4 ? h("div", { class: "cite-more" }, "외 " + (hit.spot.entries.length - 4) + "편") : null];
+    }
+    var box = h("div", { class: "cite-pop" + (hit.spot.kind === "visual" ? " visual" : ""), role: "dialog", "aria-label": "미리보기",
       onmouseenter: function () { self.overPopover = true; clearTimeout(self.hideTimer); },
-      onmouseleave: function () { self.overPopover = false; self.scheduleHide(); } },
-      hit.spot.entries.slice(0, 4).map(function (entry) { return self.renderEntry(entry, hit.spot); }),
-      hit.spot.entries.length > 4 ? h("div", { class: "cite-more" }, "외 " + (hit.spot.entries.length - 4) + "편") : null);
+      onmouseleave: function () { self.overPopover = false; self.scheduleHide(); } }, content);
     document.body.append(box);
+    this.popover = box;
+    this.place();
+    box.querySelectorAll("img").forEach(function (img) { img.addEventListener("load", function () { self.place(); }); });
+  }
+
+  place() {
+    var box = this.popover, hit = this.current;
+    if (!box || !hit) return;
     var width = box.offsetWidth, height = box.offsetHeight;
     var left = Math.max(8, Math.min(innerWidth - width - 8, hit.rect.left - 12));
     var top = hit.rect.bottom + 8;
     if (top + height > innerHeight - 8) top = Math.max(8, hit.rect.top - height - 8);
     box.style.left = left + "px";
     box.style.top = top + "px";
-    this.popover = box;
   }
 
   renderEntry(entry, spot) {
@@ -329,14 +354,38 @@ export class CitationPreview {
         else button.disabled = false;
       } }, icon("bookmark", 13), "읽어볼 논문에 추가");
     }
+    var summary = h("div", { class: "cite-summary", hidden: true });
+    var explain = h("button", { class: "btn small", onclick: async function () {
+      explain.disabled = true;
+      explain.textContent = "찾는 중…";
+      summary.hidden = false;
+      summary.replaceChildren(h("span", { class: "typing" }, h("i"), h("i"), h("i")));
+      self.place();
+      try {
+        var result = await app.api.post("/api/references/explain", { citation: entry.text });
+        var meta = result.metadata;
+        var note = result.grounded ? (meta.source === "arxiv" ? "arXiv 초록 기반" : "OpenAlex 초록 기반") : "초록을 찾지 못해 제목만 보고 썼어요";
+        var body = h("div", { class: "md" });
+        renderMarkdown(body, result.summary || "");
+        summary.replaceChildren(body, h("div", { class: "cite-source" }, note,
+          meta && meta.url ? [" · ", h("a", { href: meta.url, target: "_blank", rel: "noreferrer" }, "원문 정보")] : null));
+        explain.remove();
+      } catch (error) {
+        summary.replaceChildren(h("span", { class: "error-text" }, error.message));
+        explain.disabled = false;
+        explain.textContent = "다시 시도";
+      }
+      self.place();
+    } }, icon("sparkle", 13), "논문 설명");
     var arxiv = /(\d{4}\.\d{4,5})/.exec((entry.text.match(/arxiv[^\d]{0,12}\d{4}\.\d{4,5}/i) || [""])[0]);
     var query = entry.text.replace(/^\[\d+\]\s*|^\d+\.\s+/, "").slice(0, 250);
     return h("div", { class: "cite-entry" },
       h("div", { class: "cite-label" }, label, entry.page ? h("span", null, " · " + entry.page + "쪽 참고문헌") : null),
       h("div", { class: "cite-text" }, entry.text),
-      h("div", { class: "cite-actions" }, action,
+      summary,
+      h("div", { class: "cite-actions" }, action, explain,
         arxiv ? h("a", { href: "https://arxiv.org/abs/" + arxiv[1], target: "_blank", rel: "noreferrer" }, "arXiv") : null,
-        h("a", { href: "https://scholar.google.com/scholar?q=" + encodeURIComponent(query), target: "_blank", rel: "noreferrer" }, "Google Scholar")));
+        h("a", { href: "https://scholar.google.com/scholar?q=" + encodeURIComponent(query), target: "_blank", rel: "noreferrer" }, "Scholar")));
   }
 }
 

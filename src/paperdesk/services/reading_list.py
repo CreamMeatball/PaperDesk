@@ -8,6 +8,7 @@ from ..domain.errors import InvalidInput, NotFound
 from ..domain.models import Document, ReadingItem, utcnow
 from ..ports.downloads import FileDownloader
 from ..ports.repositories import ReadingListRepository
+from ..ports.scholarly import ScholarlyIndex
 from .library import MAX_PDF_BYTES, LibraryService
 from .references import ReferenceParser, clean_citation
 
@@ -22,12 +23,13 @@ class ReadingListService:
     """'읽어볼 논문': papers saved from citations, later turned into library PDFs."""
 
     def __init__(self, items: ReadingListRepository, library: LibraryService, downloader: FileDownloader, *,
-                 parser: ReferenceParser | None = None, new_id: Callable[[], str] = lambda: uuid.uuid4().hex,
+                 parser: ReferenceParser | None = None, index: ScholarlyIndex | None = None, new_id: Callable[[], str] = lambda: uuid.uuid4().hex,
                  clock: Callable[[], str] = utcnow) -> None:
         self._items = items
         self._library = library
         self._downloader = downloader
         self._parser = parser or ReferenceParser()
+        self._index = index
         self._new_id = new_id
         self._clock = clock
 
@@ -99,10 +101,21 @@ class ReadingListService:
         self._items.update(linked)
         return linked, document
 
-    def fetch_arxiv_pdf(self, item_id: str, folder_id: str | None = None) -> tuple[ReadingItem, Document]:
+    def find_arxiv(self, item_id: str) -> ReadingItem:
+        """Fill in a missing arXiv id by an exact-title arXiv search."""
         item = self.get(item_id)
+        if item.arxiv_id or self._index is None:
+            return item
+        found = self._index.lookup(title=item.title, doi=item.doi, year=item.year)
+        if found and found.arxiv_id:
+            item = ReadingItem(**{**item.__dict__, "arxiv_id": found.arxiv_id})
+            self._items.update(item)
+        return item
+
+    def fetch_arxiv_pdf(self, item_id: str, folder_id: str | None = None) -> tuple[ReadingItem, Document]:
+        item = self.find_arxiv(item_id)
         if not re.fullmatch(r"\d{4}\.\d{4,5}", item.arxiv_id or ""):
-            raise InvalidInput("arXiv 번호가 없는 논문이에요. PDF를 직접 추가해 주세요.")
+            raise InvalidInput("arXiv에서 같은 제목의 논문을 찾지 못했어요. PDF를 직접 추가해 주세요.")
         data = self._downloader.download(f"https://arxiv.org/pdf/{item.arxiv_id}", max_bytes=MAX_PDF_BYTES, timeout=90)
         return self.attach_pdf(item_id, f"{item.arxiv_id}.pdf", data, folder_id)
 

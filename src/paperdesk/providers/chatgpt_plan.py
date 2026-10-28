@@ -16,6 +16,7 @@ class ChatGPTPlanProvider(AIProvider):
 
     id = "chatgpt-plan"
     label = "ChatGPT 요금제 (Sign in with ChatGPT)"
+    supports_images = True
     kind = "account"
     description = "‘ChatGPT로 계속하기’로 로그인해 내 ChatGPT 요금제 사용량으로 처리합니다. OpenAI가 오픈소스·로컬 앱용으로 공개한 프리뷰 방식입니다."
     docs_url = "https://developers.openai.com/siwc/token-sharing-open-source"

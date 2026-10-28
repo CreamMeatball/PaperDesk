@@ -22,7 +22,7 @@ class ResponsesClient:
         body = {
             "model": model,
             "instructions": prompt.system,
-            "input": [{"role": "user", "content": prompt.user}],
+            "input": [{"role": "user", "content": self._content(prompt)}],
             "store": False,
             "stream": True,
         }
@@ -44,6 +44,13 @@ class ResponsesClient:
         if not completed:
             raise ProviderFailed("응답이 끝나기 전에 연결이 끊겼어요.")
         return "".join(parts)
+
+    @staticmethod
+    def _content(prompt: Prompt):
+        if not prompt.images:
+            return prompt.user
+        return [{"type": "input_text", "text": prompt.user}] + [
+            {"type": "input_image", "image_url": image.data_url} for image in prompt.images]
 
     @staticmethod
     def _failure(event: dict) -> str:

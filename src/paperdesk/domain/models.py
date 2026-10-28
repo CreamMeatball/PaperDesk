@@ -81,6 +81,26 @@ class AssistTask(str, Enum):
     EXPLAIN = "explain"
     ASK = "ask"
     SUMMARIZE = "summarize"
+    DEFINE = "define"            # word / phrase meaning in context
+    TLDR = "tldr"                # three-line summary
+    KEYWORDS = "keywords"        # key-term glossary (JSON)
+    FIGURE = "figure"            # figure / table / algorithm explanation (image + caption + mentions)
+    EQUATION = "equation"        # equation explanation (image + extracted text + surrounding text)
+    REGION = "region"            # free rectangle the user drew
+    REFERENCE = "reference"      # cited paper summary grounded on fetched metadata
+    TRANSLATE_BLOCKS = "translate_blocks"  # body translation, sentence aligned (JSON)
+
+
+@dataclass(frozen=True)
+class ImageInput:
+    media_type: str  # image/png | image/jpeg
+    data: bytes
+
+    @property
+    def data_url(self) -> str:
+        import base64
+
+        return f"data:{self.media_type};base64,{base64.b64encode(self.data).decode()}"
 
 
 @dataclass(frozen=True)
@@ -90,16 +110,71 @@ class AssistRequest:
     question: str = ""
     context: str = ""
     target_language: str = "English"
+    title: str = ""
+    images: tuple[ImageInput, ...] = ()
 
 
 @dataclass(frozen=True)
 class Prompt:
     system: str
     user: str
+    images: tuple[ImageInput, ...] = ()
 
     def as_single_text(self) -> str:
         """For backends that accept only one message, such as codex exec."""
         return f"{self.system}\n\n---\n\n{self.user}"
+
+
+@dataclass(frozen=True)
+class Annotation:
+    """Highlight or note on a page. rects are page-relative fractions [left, top, right, bottom]."""
+
+    id: str
+    doc_id: str
+    page: int
+    kind: str  # highlight | note
+    color: str
+    text: str
+    rects: tuple[tuple[float, float, float, float], ...]
+    created_at: str
+    note: str = ""
+
+    def to_dict(self) -> dict:
+        data = asdict(self)
+        data["rects"] = [list(r) for r in self.rects]
+        return data
+
+
+@dataclass(frozen=True)
+class BlockTranslation:
+    doc_id: str
+    block_key: str
+    language: str
+    source_hash: str
+    text: str
+    sentences: tuple[str, ...] | None
+    provider_id: str
+    model: str
+    created_at: str
+
+    def to_dict(self) -> dict:
+        return {"key": self.block_key, "text": self.text, "sentences": list(self.sentences) if self.sentences is not None else None,
+                "provider_id": self.provider_id, "model": self.model}
+
+
+@dataclass(frozen=True)
+class PaperMetadata:
+    title: str
+    abstract: str
+    authors: str = ""
+    year: str = ""
+    venue: str = ""
+    url: str = ""
+    source: str = ""  # arxiv | openalex
+    arxiv_id: str = ""
+
+    def to_dict(self) -> dict:
+        return asdict(self)
 
 
 @dataclass(frozen=True)

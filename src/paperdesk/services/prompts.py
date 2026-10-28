@@ -5,14 +5,15 @@ from typing import Callable
 from ..domain.errors import InvalidInput
 from ..domain.models import AssistRequest, AssistTask, Prompt
 
-PROMPT_VERSION = 1  # bump when wording changes so cached answers are not reused
+PROMPT_VERSION = 2  # bump when wording changes so cached answers are not reused
 
 BASE = (
     "You help a reader understand an academic paper. "
     "Answer in {language}. Keep technical terms, model names, dataset names and math notation in their original form. "
-    "Do not invent content that is not supported by the given text. Use Markdown sparingly. "
+    "Do not invent content that is not supported by the given material. Use Markdown sparingly; write math as LaTeX in $...$. "
     "Do not run tools or commands; reply with text only."
 )
+NO_IMAGE_NOTE = "\n\n(The image could not be sent to this model. Rely on the caption and text instead, and say so briefly.)"
 
 
 class PromptBuilder:
@@ -24,13 +25,30 @@ class PromptBuilder:
             AssistTask.EXPLAIN: self._explain,
             AssistTask.ASK: self._ask,
             AssistTask.SUMMARIZE: self._summarize,
+            AssistTask.DEFINE: self._define,
+            AssistTask.TLDR: self._tldr,
+            AssistTask.KEYWORDS: self._keywords,
+            AssistTask.FIGURE: self._figure,
+            AssistTask.EQUATION: self._equation,
+            AssistTask.REGION: self._region,
+            AssistTask.REFERENCE: self._reference,
+            AssistTask.TRANSLATE_BLOCKS: self._translate_blocks,
         }
 
-    def build(self, request: AssistRequest) -> Prompt:
+    def build(self, request: AssistRequest, *, images_supported: bool = True) -> Prompt:
         builder = self._builders.get(request.task)
         if builder is None:
             raise InvalidInput(f"지원하지 않는 작업: {request.task}")
-        return Prompt(BASE.format(language=request.target_language), builder(request))
+        user = builder(request)
+        if self._paper(request):
+            user = self._paper(request) + user
+        if request.images and not images_supported:
+            return Prompt(BASE.format(language=request.target_language), user + NO_IMAGE_NOTE)
+        return Prompt(BASE.format(language=request.target_language), user, request.images)
+
+    @staticmethod
+    def _paper(request: AssistRequest) -> str:
+        return f"Paper: {request.title}\n\n" if request.title else ""
 
     @staticmethod
     def _context(request: AssistRequest) -> str:
@@ -42,7 +60,7 @@ class PromptBuilder:
 
     def _explain(self, request: AssistRequest) -> str:
         return ("Explain the passage for a graduate student new to this subfield: what it says, why it matters "
-                "in the paper, and any terms or symbols they need. Keep it under 200 words."
+                "in the paper, and any terms or symbols they need. Keep it to about five sentences."
                 f"{self._context(request)}\n\n<passage>\n{request.text}\n</passage>")
 
     def _ask(self, request: AssistRequest) -> str:
@@ -52,6 +70,51 @@ class PromptBuilder:
                 f"{self._context(request)}\n\n<passage>\n{request.text}\n</passage>\n\nQuestion: {request.question}")
 
     def _summarize(self, request: AssistRequest) -> str:
-        return ("Summarize the paper text: problem, method, key results, limitations. Use short bullet points."
+        return ("Summarize the paper text: problem, method, key results, limitations. Use short bullet points under those four headings."
                 f"\n\n<paper>\n{request.text}\n</paper>")
+
+    def _define(self, request: AssistRequest) -> str:
+        return ("Give the meaning of the term as it is used in this sentence: a one-line translation or gloss, then one or two "
+                "sentences on what it means in this field. Be brief."
+                f"{self._context(request)}\n\n<term>\n{request.text}\n</term>")
+
+    def _tldr(self, request: AssistRequest) -> str:
+        return ("Write exactly three lines: 1) the problem, 2) the key idea, 3) the main result with numbers if given. "
+                "Each line one sentence, no headings." f"\n\n<paper>\n{request.text}\n</paper>")
+
+    def _keywords(self, request: AssistRequest) -> str:
+        return ("List the 8 to 12 key technical terms a reader must know for this paper. Reply with JSON only: "
+                '{"terms": [{"term": "original term", "meaning": "one-sentence explanation in the answer language"}]}'
+                f"\n\n<paper>\n{request.text}\n</paper>")
+
+    def _figure(self, request: AssistRequest) -> str:
+        return ("Explain this figure/table/algorithm from the paper. Cover: what is shown (axes, columns or steps), the main "
+                "takeaway, and how it supports the paper's argument. The image (if attached) shows the item with its caption."
+                f"\n\n<caption>\n{request.text}\n</caption>{self._context(request)}")
+
+    def _equation(self, request: AssistRequest) -> str:
+        return ("Explain this equation. Use three sections: **Equation** (clean LaTeX), **Symbols** (each symbol: meaning, "
+                "shape or domain; mark guesses when the text does not define it), **Meaning** (what each term does and the role of "
+                "the equation in the method). The image (if attached) shows the equation as typeset."
+                f"\n\n<extracted_text>\n{request.text}\n</extracted_text>{self._context(request)}")
+
+    def _region(self, request: AssistRequest) -> str:
+        question = request.question.strip() or "Explain what this part of the page shows and why it matters."
+        return (f"The user selected a region of a page (image attached if available). {question}"
+                f"\n\n<text_in_region>\n{request.text}\n</text_in_region>{self._context(request)}")
+
+    def _reference(self, request: AssistRequest) -> str:
+        return ("A paper cites the work below. Using only the metadata and abstract given, explain in two or three sentences "
+                "what problem the cited work addresses, its approach and its contribution. If the abstract is missing, say "
+                "that only the title is known and do not guess details."
+                f"\n\n<citation>\n{request.context}\n</citation>\n\n<metadata>\n{request.text}\n</metadata>")
+
+    def _translate_blocks(self, request: AssistRequest) -> str:
+        return (f"Translate the paper passages into natural, consistent {request.target_language}. Each block is a list of "
+                "source sentences. Return exactly one translated sentence per source sentence, in order, so the lists line up; "
+                "merge nothing and split nothing. Keep citations like [12] or (Smith et al., 2020), numbers, LaTeX and "
+                "technical terms intact; translate figure/table words naturally. "
+                f"{('Keep these terms consistent: ' + request.question) if request.question else ''}"
+                '\nReply with JSON only: {"blocks": [{"id": "...", "sentences": ["..."]}]}'
+                f"{self._context(request)}\n\n<blocks>\n{request.text}\n</blocks>")
 
