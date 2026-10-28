@@ -4,7 +4,7 @@ from urllib.parse import unquote
 
 from .. import APP_ID, __version__
 from ..app import Application
-from ..domain.errors import InvalidInput
+from ..domain.errors import InvalidInput, NotFound
 import base64
 import re
 
@@ -43,6 +43,11 @@ class ApiController:
             ("POST", "/api/reading-list/{item_id}/pdf", self.reading_attach_pdf),
             ("POST", "/api/assist", self.assist),
             ("GET", "/api/documents/{doc_id}/annotations", self.annotations),
+            ("GET", "/api/documents/{doc_id}/conversation", self.conversation),
+            ("PUT", "/api/documents/{doc_id}/conversation", self.save_conversation),
+            ("GET", "/api/preferences", self.preferences),
+            ("PATCH", "/api/preferences", self.update_preferences),
+            ("POST", "/api/state/import", self.import_legacy_state),
             ("POST", "/api/documents/{doc_id}/annotations", self.add_annotation),
             ("PATCH", "/api/annotations/{annotation_id}", self.update_annotation),
             ("DELETE", "/api/annotations/{annotation_id}", self.delete_annotation),
@@ -60,6 +65,34 @@ class ApiController:
 
     def health(self, request: Request) -> Response:
         return Response.json({"app": APP_ID, "version": __version__})
+
+    def conversation(self, request: Request) -> Response:
+        return Response.json({"turns": self.app.conversations.get(request.params["doc_id"])})
+
+    def save_conversation(self, request: Request) -> Response:
+        turns = self.app.conversations.save(request.params["doc_id"], request.json().get("turns"))
+        return Response.json({"saved": len(turns)})
+
+    def preferences(self, request: Request) -> Response:
+        return Response.json({"preferences": self.app.preferences.all()})
+
+    def update_preferences(self, request: Request) -> Response:
+        return Response.json({"preferences": self.app.preferences.update(request.json())})
+
+    def import_legacy_state(self, request: Request) -> Response:
+        data = request.json()
+        conversations = data.get("conversations", {})
+        if not isinstance(conversations, dict):
+            raise InvalidInput(_("요청 형식이 올바르지 않아요."))
+        imported = []
+        for doc_id, turns in conversations.items():
+            try:
+                self.app.conversations.save(doc_id, turns, only_missing=True)
+                imported.append(doc_id)
+            except NotFound:
+                continue  # retain legacy data for papers that are not in this library
+        prefs = self.app.preferences.update(data.get("preferences", {}), only_missing=True)
+        return Response.json({"preferences": prefs, "documents": imported})
 
     def library(self, request: Request) -> Response:
         return Response.json({
@@ -266,4 +299,3 @@ class ApiController:
         if not result.get("ok"):
             result["message"] = translate(result["message"], request.lang)
         return Response.json(result)
-

@@ -9,8 +9,9 @@ export class ApiError extends Error {
 
 // Every request carries X-Paperdesk so the local server can reject requests from other websites.
 export class ApiClient {
-  async request(method, path, body, headers) {
+  async request(method, path, body, headers, keepalive) {
     var options = { method: method, headers: Object.assign({ "X-Paperdesk": "1", "X-Paperdesk-Lang": locale() }, headers || {}) };
+    if (keepalive) options.keepalive = true;
     if (body !== undefined) {
       if (body instanceof Blob || body instanceof ArrayBuffer) {
         options.body = body;
@@ -46,4 +47,3 @@ export class ApiClient {
       { "Content-Type": "application/pdf", "X-Filename": encodeURIComponent(file.name) });
   }
 }
-

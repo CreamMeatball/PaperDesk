@@ -1,3 +1,4 @@
+import { pref, setPref } from "./prefs.js";
 import { h, icon, iconButton, confirmDialog, toast } from "./ui.js";
 import { drawRects } from "./textmap.js";
 import { t } from "./i18n.js";
@@ -10,7 +11,7 @@ export class Annotations {
     this.reader = reader;
     this.app = reader.app;
     this.items = [];
-    this.lastColor = localStorage.getItem("paperdesk-hl") || "yellow";
+    this.lastColor = pref("highlight_color", "yellow");
     this.listeners = new Set();
     this.load();
   }
@@ -49,7 +50,7 @@ export class Annotations {
     if (!info.rects || !info.rects.length) { toast(t("이 부분은 표시할 수 없어요."), true); return null; }
     color = color || this.lastColor;
     this.lastColor = color;
-    localStorage.setItem("paperdesk-hl", color);
+    setPref("highlight_color", color);
     try {
       var data = await this.app.api.post("/api/documents/" + this.reader.id + "/annotations",
         { page: info.page, kind: kind, color: color, text: info.text, rects: info.rects, note: note || "" });
@@ -135,4 +136,3 @@ export class Annotations {
     }));
   }
 }
-

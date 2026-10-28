@@ -1,3 +1,4 @@
+import { pref, setPref } from "./prefs.js";
 import { t } from "./i18n.js";
 // Client-side model of the library: folders + documents, with tree helpers. Views listen for "change".
 
@@ -10,9 +11,7 @@ export class LibraryStore extends EventTarget {
     this.folders = [];
     this.documents = [];
     this.readingList = [];
-    var saved = [];
-    try { saved = JSON.parse(localStorage.getItem("paperdesk-expanded") || "[]"); } catch (error) { saved = []; }
-    this.expanded = new Set(saved);
+    this.expanded = new Set(pref("expanded_folders", []));
   }
 
   async load() {
@@ -69,7 +68,7 @@ export class LibraryStore extends EventTarget {
   isExpanded(id) { return this.expanded.has(id); }
   setExpanded(id, open) {
     if (open) this.expanded.add(id); else this.expanded.delete(id);
-    try { localStorage.setItem("paperdesk-expanded", JSON.stringify(Array.from(this.expanded))); } catch (error) {}
+    setPref("expanded_folders", Array.from(this.expanded));
     this.changed();
   }
 
@@ -138,4 +137,3 @@ export class SettingsModel extends EventTarget {
     return this.data.providers.find(function (p) { return p.id === id; }) || null;
   }
 }
-

@@ -6,6 +6,23 @@ AI는 이미 쓰고 있는 것을 연결합니다: Codex·Claude Code 로그인,
 
 > 작업용 이름입니다. 이름은 `src/paperdesk/__init__.py`의 `APP_NAME`/`APP_ID` 한 곳에서 바뀝니다.
 
+## 로컬 실행과 저장
+
+Paperdesk는 설치한 컴퓨터에서 실행됩니다. `paperdesk`를 실행하면 앱 내부 통신용 `127.0.0.1` 프로세스와 네이티브 창이 함께 시작되고, 창을 닫으면 종료됩니다. 별도의 서버 운영이나 원격 서버 접속이 필요하지 않습니다. 화면 라이브러리와 언어 파일도 앱 패키지에 포함됩니다.
+
+macOS 데이터 폴더는 `~/Library/Application Support/Paperdesk`입니다. 앱 업데이트 때 기록을 유지하도록 실행 파일과 사용자 데이터를 분리합니다.
+
+| 저장 항목 | 위치 |
+| --- | --- |
+| PDF 원본 | `files/` |
+| 서재·폴더·번역·하이라이트·메모·AI 대화·화면 설정 | `library.sqlite3` |
+| AI 연결 설정·화면 언어·답변 언어 | `settings.json` |
+| API 키 | macOS 키체인 |
+
+앱을 다시 열거나 내부 실행 포트가 바뀌어도 기록을 불러옵니다. 예전 버전의 브라우저 저장소에 있던 대화와 화면 설정은 같은 실행 주소에서 업데이트를 처음 열 때 앱 DB로 옮깁니다. 성공한 항목만 예전 저장소에서 지우며, 이미 DB에 있는 최신 기록이나 사용자가 비운 대화를 덮어쓰지 않습니다. 논문별 대화는 최근 80개까지 저장합니다.
+
+PDF 읽기, 그림·참고문헌 미리보기, 저장된 번역·대화·메모 열람은 오프라인으로 동작합니다. 외부 연결은 선택한 클라우드 AI(API·Codex CLI·Claude Code), 논문 검색·다운로드(arXiv·OpenAlex), 사용자가 누르는 DOI·Scholar 링크 등에 사용됩니다. 참고문헌의 초록 조회와 AI 설명도 버튼을 눌렀을 때 수행합니다. Ollama나 vLLM을 내 컴퓨터에 연결하면 새 AI 작업도 로컬에서 처리할 수 있습니다.
+
 ## 설치 (macOS)
 
 ```sh
@@ -66,6 +83,8 @@ pip install -e '.[native]'                      # macOS 네이티브 창 개발
 ```
 
 데이터 폴더는 `PAPERDESK_HOME`으로 바꿀 수 있습니다.
+
+Playwright와 Chromium이 설치된 개발 환경에서는 `node tests/browser/local_state.cjs`로 외부 통신 차단, 이전 기록 이전, 대화 중 논문 전환, 앱 재실행·포트 변경 후 기록 복원을 검사합니다. 테스트는 임시 데이터 폴더를 사용합니다. 별도 설치 경로를 쓸 때는 `PAPERDESK_PLAYWRIGHT_MODULE`과 `PAPERDESK_CHROMIUM`을 지정할 수 있고, 실제 PDF를 검사하려면 `PAPERDESK_TEST_PDF`를 지정합니다.
 
 ### 화면 문구 번역
 

@@ -2,7 +2,8 @@
 (function () {
   var root = document.documentElement;
   var choice = "system";
-  try { choice = localStorage.getItem("paperdesk-theme") || "system"; } catch (e) {}
+  var saved = window.paperdeskBoot && window.paperdeskBoot.preferences;  // from /boot.js (the app's database)
+  if (saved && saved.theme) choice = saved.theme;
   function apply() {
     var dark = choice === "dark" || (choice === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
     root.dataset.themeChoice = choice;
@@ -12,7 +13,12 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", apply);
   window.paperdeskTheme = {
     get: function () { return choice; },
-    set: function (value) { choice = value; try { localStorage.setItem("paperdesk-theme", value); } catch (e) {} apply(); }
+    set: function (value) {
+      choice = value;
+      if (saved) saved.theme = value;
+      apply();
+      window.dispatchEvent(new CustomEvent("paperdesk-preference", { detail: { theme: value } }));
+    }
   };
   var params = new URLSearchParams(location.search);
   if (params.get("shell") === "native") { try { sessionStorage.setItem("paperdesk-shell", "native"); } catch (e) {} }
@@ -21,4 +27,3 @@
   root.dataset.shell = shell;
   root.dataset.platform = /Mac/.test(navigator.platform) ? "mac" : "other";
 })();
-

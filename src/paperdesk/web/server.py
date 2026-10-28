@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import mimetypes
 import shutil
@@ -46,6 +47,13 @@ class RequestHandler(BaseHTTPRequestHandler):
     server: PaperdeskServer
     server_version = f"{APP_NAME}/{__version__}"
     protocol_version = "HTTP/1.1"
+
+    def handle(self) -> None:
+        try:
+            super().handle()
+        except (ConnectionResetError, BrokenPipeError):
+            # Closing/reloading the local web view can terminate a keep-alive connection mid-response.
+            self.close_connection = True
 
     def do_GET(self) -> None: self._dispatch()
     def do_POST(self) -> None: self._dispatch()
@@ -108,6 +116,8 @@ class RequestHandler(BaseHTTPRequestHandler):
     def _static(self, path: str) -> Response:
         if self.command != "GET":
             raise NotFound(_("없는 주소예요."))
+        if path == "/boot.js":
+            return self._boot_script()
         if path in APP_ROUTES:
             path = "/index.html"
         target = (self.server.static_dir / path.lstrip("/")).resolve()
@@ -119,6 +129,13 @@ class RequestHandler(BaseHTTPRequestHandler):
         if kind.startswith("text/") or kind.endswith("javascript"):
             kind += "; charset=utf-8"
         return Response.send_file(target, kind, {"Cache-Control": "no-cache"})
+
+    def _boot_script(self) -> Response:
+        # Loaded synchronously before first paint so the saved theme and panel state apply without a flash.
+        # A script file (not inline) keeps the Content-Security-Policy free of 'unsafe-inline'.
+        prefs = json.dumps(self.server.app.preferences.all(), ensure_ascii=False).replace("<", "\\u003c")
+        body = f"window.paperdeskBoot = {{ preferences: {prefs} }};\n".encode("utf-8")
+        return Response(200, body, "text/javascript; charset=utf-8", {"Cache-Control": "no-store"})
 
     def _send(self, response: Response) -> None:
         size = response.file.stat().st_size if response.file else len(response.body)
@@ -144,4 +161,3 @@ def create_server(app: Application, host: str = "127.0.0.1", port: int = 0) -> P
     if host not in ("127.0.0.1", "localhost", "::1"):
         raise ValueError("보안을 위해 이 컴퓨터(127.0.0.1)에서만 열 수 있어요.")
     return PaperdeskServer((host, port), app)
-

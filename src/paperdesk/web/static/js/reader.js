@@ -1,3 +1,4 @@
+import { pref, setPref } from "./prefs.js";
 import { h, icon, iconButton, toast, MOD, modKey } from "./ui.js";
 import { CitationPreview, ReferenceIndex } from "./references.js";
 import { analyzeDocument } from "./layout.js";
@@ -41,7 +42,7 @@ export class ReaderView {
     this.alive = true;
     this.analysis = null;
     this.references = null;
-    this.tmode = localStorage.getItem("paperdesk-tmode") || "side";
+    this.tmode = pref("translation_mode", "side");
     this.onSelection = this.onSelection.bind(this);
     this.onKey = this.onKey.bind(this);
     this.onResize = this.onResize.bind(this);
@@ -220,7 +221,7 @@ export class ReaderView {
   setTranslationMode(mode) {
     if (mode === this.tmode) return;
     this.tmode = mode;
-    localStorage.setItem("paperdesk-tmode", mode);
+    setPref("translation_mode", mode);
     this.fitScale = this.computeFit();
     this.relayout();
   }
@@ -505,4 +506,3 @@ export class ReaderView {
     if (action) { event.preventDefault(); this.runSelection(action, this.selection); }
   }
 }
-

@@ -9,9 +9,9 @@ from .infrastructure.blobs import FileBlobStore
 from .infrastructure.downloads import UrllibDownloader
 from .infrastructure.scholarly import ArxivIndex, CompositeIndex, OpenAlexIndex
 from .infrastructure.settings_store import JsonSettingsStore
-from .infrastructure.sqlite import (Database, SqliteCompletionCache, SqliteDocumentRepository, SqliteFolderRepository,
-                                    SqliteAnnotationRepository, SqlitePageTextRepository, SqliteReadingListRepository,
-                                    SqliteTranslationRepository)
+from .infrastructure.sqlite import (Database, SqliteCompletionCache, SqliteConversationRepository, SqliteDocumentRepository,
+                                    SqliteFolderRepository, SqliteAnnotationRepository, SqlitePageTextRepository,
+                                    SqlitePreferenceRepository, SqliteReadingListRepository, SqliteTranslationRepository)
 from .platforms import Platform, current_platform
 from .ports.ai import CommandRunner, HttpClient
 from .ports.downloads import FileDownloader
@@ -20,6 +20,7 @@ from .ports.secrets import SecretStore
 from .ports.settings import Settings, SettingsStore
 from .providers.registry import ProviderRegistry, default_registry
 from .providers.transport import SubprocessRunner, UrllibHttpClient
+from .services.app_state import ConversationService, PreferenceService
 from .services.assistant import AssistantService
 from .services.library import FolderService, LibraryService
 from .services.prompts import PromptBuilder
@@ -42,6 +43,8 @@ class Application:
     annotations: AnnotationService
     translations: TranslationService
     reference_notes: ReferenceNoteService
+    conversations: ConversationService
+    preferences: PreferenceService
 
     @classmethod
     def build(cls, paths: AppPaths | None = None, *, secrets: SecretStore | None = None,
@@ -71,5 +74,7 @@ class Application:
         translations = TranslationService(SqliteTranslationRepository(database), assistant, library,
                                           language=lambda: settings.load().target_language)
         notes = ReferenceNoteService(scholarly, assistant, cache)
-        return cls(paths, platform, library, folders, assistant, settings, reading, annotations, translations, notes)
-
+        conversations = ConversationService(SqliteConversationRepository(database), library)
+        preferences = PreferenceService(SqlitePreferenceRepository(database))
+        return cls(paths, platform, library, folders, assistant, settings, reading, annotations, translations, notes,
+                   conversations, preferences)

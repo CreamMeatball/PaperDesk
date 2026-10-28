@@ -385,5 +385,11 @@
   "폴더 이름을 입력하세요.": "Enter a folder name.",
   "폴더 이름은 {n}자 이하로 해 주세요.": "Folder names can be at most {n} characters.",
   "논문 제목을 입력하세요.": "Enter a paper title.",
-  "논문 제목은 {n}자 이하로 해 주세요.": "Paper titles can be at most {n} characters."
+  "논문 제목은 {n}자 이하로 해 주세요.": "Paper titles can be at most {n} characters.",
+  "대화 기록 형식이 올바르지 않아요.": "The chat history is not in a valid format.",
+  "대화 기록이 너무 커요.": "The chat history is too large.",
+  "화면 설정 값이 올바르지 않아요: {key}": "Invalid display preference: {key}",
+  "화면 설정을 저장하지 못했어요. 다시 시도해 주세요.": "Could not save display preferences. Please try again.",
+  "기존 기록을 옮기지 못했어요. 원래 기록은 보존되어 있어요.": "Could not migrate existing records. The original records are preserved.",
+  "대화 기록을 저장하지 못했어요. 다시 시도해 주세요.": "Could not save chat history. Please try again."
 }

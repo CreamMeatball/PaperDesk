@@ -11,8 +11,9 @@ from dataclasses import fields
 import json
 
 from ..domain.models import Annotation, BlockTranslation, Document, Folder, ReadingItem
-from ..ports.repositories import (AnnotationRepository, CompletionCache, DocumentRepository, FolderRepository, PageTextRepository,
-                                  ReadingListRepository, TranslationRepository)
+from ..ports.repositories import (AnnotationRepository, CompletionCache, ConversationRepository, DocumentRepository,
+                                  FolderRepository, PageTextRepository, PreferenceRepository, ReadingListRepository,
+                                  TranslationRepository)
 
 # Append-only. Each entry upgrades the schema by one version (tracked in PRAGMA user_version).
 MIGRATIONS: tuple[str, ...] = (
@@ -88,6 +89,17 @@ MIGRATIONS: tuple[str, ...] = (
         model TEXT NOT NULL,
         created_at TEXT NOT NULL,
         PRIMARY KEY (doc_id, block_key, language)
+    );
+    """,
+    """
+    CREATE TABLE conversations (
+        doc_id TEXT PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
+        turns TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE TABLE preferences (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
     );
     """,
 )
@@ -335,3 +347,39 @@ class SqliteCompletionCache(CompletionCache):
         with self._db.connect() as db:
             db.execute("INSERT OR REPLACE INTO completions (key, text, created_at) VALUES (?, ?, ?)", (key, text, stamp))
 
+
+class SqliteConversationRepository(ConversationRepository):
+    def __init__(self, database: Database) -> None:
+        self._db = database
+
+    def get(self, doc_id: str) -> list[dict]:
+        with self._db.connect() as db:
+            row = db.execute("SELECT turns FROM conversations WHERE doc_id = ?", (doc_id,)).fetchone()
+        return json.loads(row["turns"]) if row else []
+
+    def put(self, doc_id: str, turns: list[dict], updated_at: str, *, only_missing: bool = False) -> None:
+        with self._db.connect() as db:
+            # Retain an empty row after a user clears chat, so an old browser's legacy data cannot resurrect it.
+            conflict = "IGNORE" if only_missing else "REPLACE"
+            db.execute(f"INSERT OR {conflict} INTO conversations (doc_id, turns, updated_at) VALUES (?, ?, ?)",
+                       (doc_id, json.dumps(turns, ensure_ascii=False), updated_at))
+
+    def delete(self, doc_id: str) -> None:
+        with self._db.connect() as db:
+            db.execute("DELETE FROM conversations WHERE doc_id = ?", (doc_id,))
+
+
+class SqlitePreferenceRepository(PreferenceRepository):
+    def __init__(self, database: Database) -> None:
+        self._db = database
+
+    def all(self) -> dict:
+        with self._db.connect() as db:
+            rows = db.execute("SELECT key, value FROM preferences").fetchall()
+        return {row["key"]: json.loads(row["value"]) for row in rows}
+
+    def put_many(self, values: dict, *, only_missing: bool = False) -> None:
+        with self._db.connect() as db:
+            conflict = "IGNORE" if only_missing else "REPLACE"
+            db.executemany(f"INSERT OR {conflict} INTO preferences (key, value) VALUES (?, ?)",
+                           [(key, json.dumps(value, ensure_ascii=False)) for key, value in values.items()])

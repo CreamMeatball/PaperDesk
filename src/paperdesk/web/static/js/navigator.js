@@ -1,3 +1,4 @@
+import { pref, setPref } from "./prefs.js";
 import { h, icon, iconButton } from "./ui.js";
 import { t } from "./i18n.js";
 
@@ -5,21 +6,21 @@ import { t } from "./i18n.js";
 export class Navigator {
   constructor(reader) {
     this.reader = reader;
-    this.tab = localStorage.getItem("paperdesk-nav-tab") || "sections";
+    this.tab = pref("navigator_tab", "sections");
     this.selected = new Set();
     var self = this;
     this.button = iconButton("list", t("목차·쪽 목록"), function () { self.toggle(); });
     this.drawer = h("aside", { class: "nav-drawer", hidden: true });
     reader.bodyEl.prepend(this.drawer);
-    if (localStorage.getItem("paperdesk-nav") === "open") this.open(this.tab, true);
+    if (pref("navigator") === "open") this.open(this.tab, true);
   }
 
   toggle() { if (this.drawer.hidden) this.open(this.tab); else this.close(); }
 
   open(tab, quiet) {
     this.tab = tab || this.tab;
-    localStorage.setItem("paperdesk-nav-tab", this.tab);
-    localStorage.setItem("paperdesk-nav", "open");
+    setPref("navigator_tab", this.tab);
+    setPref("navigator", "open");
     var wasHidden = this.drawer.hidden;
     this.drawer.hidden = false;
     this.button.classList.add("on");
@@ -30,7 +31,7 @@ export class Navigator {
   close() {
     this.drawer.hidden = true;
     this.button.classList.remove("on");
-    localStorage.setItem("paperdesk-nav", "closed");
+    setPref("navigator", "closed");
     if (this.thumbObserver) this.thumbObserver.disconnect();
     this.reader.onResize();
   }
@@ -118,4 +119,3 @@ export class Navigator {
     } catch (error) { console.warn(error); }
   }
 }
-

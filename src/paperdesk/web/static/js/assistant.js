@@ -13,6 +13,7 @@ export class AssistantPanel {
     this.app = app;
     this.reader = null;
     this.turns = [];
+    this.histories = new Map();
     this.quoted = null;
     this.tab = "chat";
     this.digest = {};
@@ -27,21 +28,58 @@ export class AssistantPanel {
     this.quoted = null;
     this.digest = {};
     if (!reader) { this.root.replaceChildren(); return; }
-    this.turns = this.loadTurns(reader.id);
+    this.history = this.historyFor(reader.id);
+    this.turns = this.history.turns;
+    var history = this.history;
+    history.ready.then(() => {
+      if (this.reader !== reader) return;
+      this.renderBody();
+      this.renderHead();
+    });
     var self = this;
     this.unsubscribe = reader.annotations.onChange(function () { if (self.tab === "notes") self.renderBody(); });
     this.build();
   }
 
-  storageKey(id) { return "paperdesk-thread:" + id; }
-  loadTurns(id) {
-    try { return JSON.parse(localStorage.getItem(this.storageKey(id)) || "[]"); } catch (error) { return []; }
+  // Chat history is kept per paper in the app's database (GET/PUT /api/documents/<id>/conversation).
+  historyFor(id) {
+    if (this.histories.has(id)) return this.histories.get(id);
+    var history = { id: id, turns: [], writes: Promise.resolve() }, self = this;
+    this.histories.set(id, history);
+    history.ready = this.app.api.get("/api/documents/" + id + "/conversation").then(function (result) {
+      history.turns.push.apply(history.turns, result.turns || []);
+      return true;
+    }).catch(function (error) {
+      self.histories.delete(id); // reopening allows another load; never overwrite a history we couldn't read
+      toast(error.message, true);
+      return false;
+    });
+    return history;
   }
-  saveTurns() {
-    if (!this.reader) return;
-    var done = this.turns.filter(function (x) { return x.status !== "pending"; }).slice(-MAX_TURNS)
+  saveTurns(history) {
+    history = history || this.history;
+    if (!history) return Promise.resolve();
+    var done = history.turns.filter(function (x) { return x.status !== "pending"; }).slice(-MAX_TURNS)
       .map(function (x) { var copy = Object.assign({}, x); delete copy.thumb; return copy; });
-    try { localStorage.setItem(this.storageKey(this.reader.id), JSON.stringify(done)); } catch (error) {}
+    var api = this.app.api, body = { turns: done };
+    // Save immediately, in order. Small writes may finish while a window is closing.
+    var keepalive = new Blob([JSON.stringify(body)]).size < 60000;
+    history.writes = history.writes.then(function () {
+      return api.request("PUT", "/api/documents/" + history.id + "/conversation", body, null, keepalive);
+    }).catch(function (error) {
+      if (error.status !== 404) toast(t("대화 기록을 저장하지 못했어요. 다시 시도해 주세요."), true);
+    });
+    return history.writes;
+  }
+
+  async clearTurns() {
+    var history = this.history;
+    if (!history || !await history.ready) return;
+    history.turns.splice(0);
+    await this.saveTurns(history);
+    if (this.history !== history || !this.reader) return;
+    this.renderThread();
+    this.renderHead();
   }
 
   build() {
@@ -61,14 +99,14 @@ export class AssistantPanel {
     this.root.replaceChildren(this.head, this.tabs, this.body, this.composer);
     this.renderHead();
     this.renderContext();
-    this.showTab(this.tab);
+    this.showTab(this.tab, true);
   }
 
-  showTab(tab) {
+  showTab(tab, quiet) {
     this.tab = tab;
     if (!this.reader) return;
     var self = this;
-    this.app.showAssistant();
+    if (!quiet) this.app.showAssistant();
     this.tabs.replaceChildren.apply(this.tabs, TABS.map(function (tabItem) {
       return h("button", { class: tabItem[0] === tab ? "on" : "", onclick: function () { self.showTab(tabItem[0]); } }, t(tabItem[1]));
     }));
@@ -93,7 +131,7 @@ export class AssistantPanel {
       h("button", { class: "provider-pill", title: t("AI 연결 바꾸기"), onclick: function () { app.router.go("/settings"); } },
         h("i", { class: "dot " + (active ? (active.available ? "ok" : "bad") : "") }),
         h("span", null, active ? active.label : t("AI 연결 안 됨"))),
-      this.turns.length && this.tab === "chat" ? iconButton("trash", t("대화 지우기"), function () { self.turns = []; self.saveTurns(); self.renderThread(); self.renderHead(); }) : null,
+      this.turns.length && this.tab === "chat" ? iconButton("trash", t("대화 지우기"), function () { self.clearTurns(); }) : null,
       iconButton("close", t("패널 닫기 ({key})", { key: MOD + "J" }), function () { app.toggleAssistant(); })].filter(Boolean));
   }
 
@@ -198,12 +236,15 @@ export class AssistantPanel {
   }
 
   async run(request) {
-    var reader = this.reader;
+    var reader = this.reader, history = this.history;
+    if (!reader || !history || !await history.ready) return;
     var turn = { task: request.task, question: request.question || "", quote: request.quote || "", page: request.page || null,
       label: request.label || "", thumb: request.thumb || null, status: "pending" };
-    this.turns.push(turn);
-    if (this.tab === "chat") this.renderThread();
-    this.renderHead();
+    history.turns.push(turn);
+    if (this.reader === reader) {
+      if (this.tab === "chat") this.renderThread();
+      this.renderHead();
+    }
     try {
       var result = await this.app.api.post("/api/assist", {
         task: request.task, text: request.text, question: request.question || "", context: request.context || "",
@@ -219,8 +260,9 @@ export class AssistantPanel {
       turn.error = error.message;
       turn.code = error.code;
     }
-    if (this.reader !== reader) return; // user switched papers while waiting
-    this.saveTurns();
+    // A response still belongs to its original paper if the user navigated away while waiting.
+    await this.saveTurns(history);
+    if (this.reader !== reader) return;
     if (this.tab === "chat") this.renderThread();
   }
 
@@ -241,7 +283,7 @@ export class AssistantPanel {
   }
 
   async loadDigest(cacheOnly, only) {
-    if (!this.reader || !this.reader.analysis) return;
+    if (!this.reader || !this.reader.analysis || !this.reader.paperText(PAPER_LIMIT).trim()) return;
     var reader = this.reader, self = this;
     var tasks = only ? [only] : ["tldr", "keywords", "summarize"];
     await Promise.all(tasks.map(async function (task) {
@@ -300,4 +342,3 @@ export class AssistantPanel {
     this.body.replaceChildren(parts);
   }
 }
-

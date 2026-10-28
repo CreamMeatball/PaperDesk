@@ -10,6 +10,7 @@ import { ReadingListView } from "./js/reading.js";
 import { askText, confirmDialog, h, icon, modKey, toast } from "./js/ui.js";
 import { pdfFiles } from "./js/dnd.js";
 import { locale, setLocale, t } from "./js/i18n.js";
+import { migrateLegacy, pref, setPref } from "./js/prefs.js";
 
 var VIEWS = { library: LibraryView, reader: ReaderView, settings: SettingsView };
 
@@ -28,8 +29,8 @@ class App {
     this.lastLibrary = "/library";
     this.fileInput = h("input", { type: "file", accept: "application/pdf,.pdf", multiple: true, hidden: true });
     document.body.append(this.fileInput);
-    if (localStorage.getItem("paperdesk-sidebar") === "hidden") this.shell.classList.add("sidebar-hidden");
-    if (localStorage.getItem("paperdesk-assistant") === "collapsed") this.shell.classList.add("assistant-collapsed");
+    if (pref("sidebar") === "hidden") this.shell.classList.add("sidebar-hidden");
+    if (pref("assistant") === "collapsed") this.shell.classList.add("assistant-collapsed");
 
     var self = this;
     this.router.addEventListener("change", function () { self.render(); });
@@ -94,13 +95,13 @@ class App {
   sidebarHidden() { return this.shell.classList.contains("sidebar-hidden"); }
   toggleSidebar() {
     this.shell.classList.toggle("sidebar-hidden");
-    localStorage.setItem("paperdesk-sidebar", this.sidebarHidden() ? "hidden" : "shown");
+    setPref("sidebar", this.sidebarHidden() ? "hidden" : "shown");
     if (this.view && this.view.render && !(this.view instanceof ReaderView)) this.view.render(false);
     if (this.view instanceof ReaderView) setTimeout(function () { window.dispatchEvent(new Event("resize")); }, 240);
   }
   toggleAssistant() {
     this.shell.classList.toggle("assistant-collapsed");
-    localStorage.setItem("paperdesk-assistant", this.shell.classList.contains("assistant-collapsed") ? "collapsed" : "open");
+    setPref("assistant", this.shell.classList.contains("assistant-collapsed") ? "collapsed" : "open");
     setTimeout(function () { window.dispatchEvent(new Event("resize")); }, 240);
   }
   showAssistant() {
@@ -233,8 +234,7 @@ class App {
     if (!ok) return;
     try {
       for (var i = 0; i < ids.length; i++) {
-        await this.api.del("/api/documents/" + ids[i]);
-        localStorage.removeItem("paperdesk-thread:" + ids[i]);
+        await this.api.del("/api/documents/" + ids[i]);  // the chat history goes with it (database cascade)
       }
       await this.store.load();
     } catch (error) { toast(error.message, true); }
@@ -252,5 +252,9 @@ class App {
   }
 }
 
-window.paperdesk = new App();
-window.paperdesk.start();
+async function start() {
+  await migrateLegacy(new ApiClient());
+  window.paperdesk = new App();
+  await window.paperdesk.start();
+}
+start().catch(function (error) { toast(error.message, true); });

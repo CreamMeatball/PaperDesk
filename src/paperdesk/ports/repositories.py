@@ -109,3 +109,25 @@ class CompletionCache(ABC):
     @abstractmethod
     def put(self, key: str, text: str) -> None: ...
 
+
+class ConversationRepository(ABC):
+    """AI chat turns per paper, stored as opaque JSON-ready dicts (the UI owns their shape)."""
+
+    @abstractmethod
+    def get(self, doc_id: str) -> list[dict]: ...
+
+    @abstractmethod
+    def put(self, doc_id: str, turns: list[dict], updated_at: str, *, only_missing: bool = False) -> None: ...
+
+    @abstractmethod
+    def delete(self, doc_id: str) -> None: ...
+
+
+class PreferenceRepository(ABC):
+    """Small UI preferences (theme, panel state, ...) as key -> JSON value."""
+
+    @abstractmethod
+    def all(self) -> dict: ...
+
+    @abstractmethod
+    def put_many(self, values: dict, *, only_missing: bool = False) -> None: ...
