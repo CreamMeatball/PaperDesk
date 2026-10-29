@@ -17,6 +17,8 @@ export class AssistantPanel {
     this.quoted = null;
     this.tab = "chat";
     this.digest = {};
+    this.modelChoices = {};
+    this.modelCatalogs = {};
     var self = this;
     app.settings.addEventListener("change", function () { if (self.reader) self.renderHead(); });
   }
@@ -88,14 +90,19 @@ export class AssistantPanel {
     this.tabs = h("div", { class: "seg as-tabs" });
     this.body = h("div", { class: "as-body" });
     this.ctx = h("div", { class: "ctx" });
-    this.input = h("textarea", { rows: "2", placeholder: t("이 논문에 대해 물어보세요"),
+    this.input = h("textarea", { rows: "3", "aria-label": t("이 논문에 대해 물어보세요"), placeholder: t("이 논문에 대해 물어보세요"),
       oninput: function () { self.autosize(); self.sendButton.disabled = !self.input.value.trim(); },
       onkeydown: function (event) {
         if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); self.submit(); }
       } });
     this.sendButton = h("button", { class: "send", title: t("보내기"), disabled: true, onclick: function () { self.submit(); } }, icon("send", 14));
+    this.modelSelect = h("select", { "aria-label": t("질문 모델"), onchange: function () {
+      var active = self.app.settings.active();
+      if (active) self.modelChoices[active.id] = self.modelSelect.value;
+    } });
+    this.modelRow = h("div", { class: "chat-model" }, this.modelSelect);
     this.composer = h("div", { class: "composer" }, this.ctx, this.input,
-      h("div", { class: "row" }, h("span", { class: "hint" }, t("⏎ 보내기 · ⇧⏎ 줄바꿈 · 글 선택 후 T·E·W·Q·H·C")), this.sendButton));
+      h("div", { class: "row" }, h("span", { class: "hint" }, t("⇧⏎ 줄바꿈")), this.modelRow, this.sendButton));
     this.root.replaceChildren(this.head, this.tabs, this.body, this.composer);
     this.renderHead();
     this.renderContext();
@@ -126,6 +133,7 @@ export class AssistantPanel {
 
   renderHead() {
     var app = this.app, self = this, active = app.settings.active();
+    this.renderModelChoice(active);
     this.head.replaceChildren.apply(this.head, [
       h("h2", null, t("AI 도우미")),
       h("button", { class: "provider-pill", title: t("AI 연결 바꾸기"), onclick: function () { app.router.go("/settings"); } },
@@ -133,6 +141,25 @@ export class AssistantPanel {
         h("span", null, active ? active.label : t("AI 연결 안 됨"))),
       this.turns.length && this.tab === "chat" ? iconButton("trash", t("대화 지우기"), function () { self.clearTurns(); }) : null,
       iconButton("close", t("패널 닫기 ({key})", { key: MOD + "J" }), function () { app.toggleAssistant(); })].filter(Boolean));
+  }
+
+  renderModelChoice(active) {
+    var supportsModel = active && active.options.some(function (option) { return option.key === "model"; });
+    this.modelRow.hidden = !supportsModel;
+    if (!supportsModel) return;
+    var self = this, selected = this.modelChoices[active.id] || active.model || "";
+    var models = Array.from(new Set([active.model].concat(this.modelCatalogs[active.id] || active.models || [], [selected]).filter(Boolean)));
+    this.modelSelect.replaceChildren(h("option", { value: "", selected: !selected },
+      active.model ? t("기본 모델 ({model})", { model: active.model }) : t("기본 모델")),
+      ...models.map(function (model) { return h("option", { value: model, selected: selected === model }, model); }));
+    if (!Object.prototype.hasOwnProperty.call(this.modelCatalogs, active.id)) {
+      this.modelCatalogs[active.id] = active.models || [];
+      this.app.api.get("/api/providers/" + active.id + "/models").then(function (data) {
+        self.modelCatalogs[active.id] = data.models;
+        var current = self.app.settings.active();
+        if (self.reader && current && current.id === active.id) self.renderModelChoice(current);
+      }).catch(function (error) { console.warn(error); });
+    }
   }
 
   renderContext() {
@@ -237,6 +264,7 @@ export class AssistantPanel {
 
   async run(request) {
     var reader = this.reader, history = this.history;
+    var active = this.app.settings.active(), model = active ? this.modelChoices[active.id] || "" : "";
     if (!reader || !history || !await history.ready) return;
     var turn = { task: request.task, question: request.question || "", quote: request.quote || "", page: request.page || null,
       label: request.label || "", thumb: request.thumb || null, status: "pending" };
@@ -248,7 +276,7 @@ export class AssistantPanel {
     try {
       var result = await this.app.api.post("/api/assist", {
         task: request.task, text: request.text, question: request.question || "", context: request.context || "",
-        title: reader.title(), images: request.images || []
+        title: reader.title(), images: request.images || [], model: model
       });
       turn.status = "done";
       turn.answer = result.text;

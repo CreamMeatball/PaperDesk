@@ -1,8 +1,8 @@
-import { h, icon, iconButton, toast } from "./ui.js";
+import { h, icon, iconButton, toast, confirmDialog } from "./ui.js";
 import { LANGUAGES, t } from "./i18n.js";
 
 var KIND_LABEL = {
-  "local-cli": "내 컴퓨터 CLI", "account": "계정 로그인", "api": "API 키", "local-server": "로컬·자체 서버", "offline": "체험"
+  "local-cli": "내 컴퓨터 CLI", "api": "API 키", "local-server": "로컬·자체 서버"
 };
 var LANGUAGE_NAMES = {
   "Korean": "한국어", "English": "영어", "Japanese": "일본어", "Chinese (Simplified)": "중국어(간체)", "Spanish": "스페인어",
@@ -16,6 +16,7 @@ export class SettingsView {
     this.app = app;
     this.open = new Set();
     this.results = {};
+    this.catalogs = {};
     this.render(true);
   }
 
@@ -38,6 +39,14 @@ export class SettingsView {
     this.inner.replaceChildren(
       h("h2", null, t("설정")),
       h("p", { class: "lead" }, t("모든 논문과 설정은 이 컴퓨터에만 저장돼요. API 키는 macOS 키체인에 보관해요.")),
+      h("p", { class: "lead" }, t("클라우드 AI를 사용하면 선택한 본문·주변 문맥·그림이 해당 AI 제공자에게 전송돼요. 자동으로 다른 유료 연결로 바꾸지 않아요.")),
+      !data.provider || !app.settings.active().available ? h("div", { class: "group" },
+        h("p", { class: "desc" }, t("Codex 또는 Claude Code에 로그인한 뒤 다시 확인하세요. 이미 로그인된 연결과 지원 모델을 찾아 선택해요. 유료 응답 시험은 보내지 않아요.")),
+        h("button", { class: "btn primary", onclick: async function (event) {
+          event.currentTarget.disabled = true;
+          try { await app.settings.initialize(); await self.render(false); }
+          catch (error) { toast(error.message, true); event.currentTarget.disabled = false; }
+        } }, t("로그인 상태 다시 확인"))) : null,
       this.general(data),
       h("h3", null, t("AI 연결")),
       h("p", { class: "lead" }, t("번역·설명·질문에 쓸 AI를 하나 고르세요. 이미 쓰는 계정이나 내 컴퓨터의 모델을 그대로 연결할 수 있어요.")),
@@ -45,7 +54,11 @@ export class SettingsView {
       h("h3", null, t("Claude 데스크톱·Codex에서 내 논문 읽기")),
       this.mcpSection(),
       h("h3", null, t("정보·업데이트")),
-      this.updateSection(updates));
+      this.updateSection(updates),
+      h("h3", null, t("백업·복원")), this.backupSection(),
+      h("h3", null, t("지원 범위·개인정보")),
+      h("p", { class: "lead" }, t("Mac 베타는 Apple Silicon을 대상으로 해요. 텍스트 PDF 읽기를 지원하며 스캔 문서 OCR과 암호화 PDF는 지원하지 않아요. AI 번역은 원문·수식·인용과 함께 확인해 주세요.")),
+      h("a", { class: "btn", href: "/api/diagnostics", download: "Paperdesk-diagnostics.json" }, t("내용 없는 진단 정보 저장")));
   }
 
   updateSection(data) {
@@ -95,7 +108,15 @@ export class SettingsView {
     } }, [["system", t("시스템 연동")]].concat(LANGUAGES).map(function (item) {
       return h("option", { value: item[0], selected: item[0] === (data.ui_language || "system") }, item[1]);
     }));
+    var autoTranslate = h("input", { type: "checkbox", checked: !!data.auto_translate, "aria-label": t("논문 열 때 본문 자동 번역"), onchange: async function () {
+      autoTranslate.disabled = true;
+      try { app.settings.data = await app.api.put("/api/settings", { auto_translate: autoTranslate.checked }); }
+      catch (error) { autoTranslate.checked = !autoTranslate.checked; toast(error.message, true); }
+      finally { autoTranslate.disabled = false; }
+    } });
     return h("div", { class: "group" },
+      h("div", { class: "field-row" }, h("div", { class: "k" }, t("논문 열 때 본문 자동 번역"), h("small", null,
+        t("켜면 미번역 본문 전체를 연결한 AI로 번역해요. 사용량이나 요금이 발생할 수 있어요. 저장된 번역은 재사용하고 멈춘 작업은 자동 재개하지 않아요."))), autoTranslate),
       h("div", { class: "field-row" }, h("div", { class: "k" }, t("화면 언어"), h("small", null, t("메뉴와 버튼에 쓰는 언어예요. 처음에는 시스템 언어를 따라요."))), uiSelect),
       h("div", { class: "field-row" }, h("div", { class: "k" }, t("화면 테마"), h("small", null, t("PDF 지면은 어느 테마에서나 흰색으로 보여요."))), seg),
       h("div", { class: "field-row" }, h("div", { class: "k" }, t("번역·답변 언어"), h("small", null, t("처음에는 시스템 언어를 따라요."))), select));
@@ -104,6 +125,7 @@ export class SettingsView {
   providerCard(p, activeId) {
     var self = this, app = this.app;
     var isOpen = this.open.has(p.id);
+    if (this.catalogs[p.id]) p.models = this.catalogs[p.id];
     var radio = h("input", { type: "radio", name: "provider", checked: p.id === activeId, "aria-label": t("{name} 사용", { name: p.label }),
       onclick: function (event) { event.stopPropagation(); self.activate(p.id); } });
     var head = h("div", { class: "provider-head", onclick: function () {
@@ -111,7 +133,7 @@ export class SettingsView {
       self.render(false);
     } },
       radio, h("span", { class: "name" }, p.label), h("span", { class: "kind" }, t(KIND_LABEL[p.kind] || p.kind)),
-      h("span", { class: "state" }, h("i", { class: "dot " + (p.available ? "ok" : "bad") }), h("span", { title: p.detail }, p.available ? t("사용 가능") : t("설정 필요"))));
+      h("span", { class: "state" }, h("i", { class: "dot " + (p.available ? "ok" : "bad") }), h("span", { title: p.detail }, p.available ? (p.kind === "local-cli" ? t("로그인 확인됨 · 응답 시험 필요") : t("사용 가능")) : t("설정 필요"))));
     var inputs = {};
     var grid = h("div", { class: "form-grid" });
     p.options.forEach(function (option) {
@@ -134,9 +156,11 @@ export class SettingsView {
     var body = h("div", { class: "provider-body" },
       h("p", { class: "desc" }, p.description, p.docs_url ? [" ", h("a", { href: p.docs_url, target: "_blank", rel: "noreferrer" }, t("안내 문서"))] : null),
       h("p", { class: "desc", style: "font-size:12px" }, t("상태: {detail}", { detail: p.detail })),
+      p.kind === "local-cli" ? h("p", { class: "desc" }, p.id === "codex-cli" ? t("CLI를 설치한 뒤 터미널에서 codex login을 실행하세요. 설치·모델 확인 후 모델을 저장하고 연결 시험을 해 주세요.") : t("Claude Code를 설치한 뒤 터미널에서 claude를 실행해 /login 하세요. 연결 시험에는 소량의 사용량이 발생해요.")) : null,
       p.supports_images ? null : h("p", { class: "desc", style: "font-size:12px" }, t("그림·수식 설명은 이미지 없이 캡션과 본문 글자만 보내 설명해요.")),
       p.options.length ? grid : null,
       h("div", { class: "actions-row" },
+        p.kind === "local-cli" ? h("button", { class: "btn", onclick: function (event) { self.discover(p, event.currentTarget); } }, t("설치·모델 확인")) : null,
         p.options.length ? h("button", { class: "btn", onclick: function () { self.save(p, inputs); } }, t("저장")) : null,
         h("button", { class: "btn", onclick: function (event) { self.test(p, event.currentTarget); } }, t("연결 시험")),
         p.id !== activeId ? h("button", { class: "btn primary", onclick: function () { self.activate(p.id); } }, t("이 AI 사용")) : null,
@@ -148,11 +172,55 @@ export class SettingsView {
 
   async activate(id) {
     try {
+      var tested = await this.app.api.post("/api/providers/" + id + "/test");
+      if (!tested.ok) { toast(tested.message, true); return; }
       await this.app.api.put("/api/settings", { provider: id });
       this.open.add(id);
       await this.app.settings.load();
       toast(t("사용할 AI를 바꿨어요"));
       this.render(false);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async discover(p, button) {
+    button.disabled = true;
+    try {
+      var result = await this.app.api.post("/api/providers/" + p.id + "/discover");
+      this.catalogs[p.id] = result.models || [];
+      this.results[p.id] = { ok: !!result.selected, text: result.candidates.map(function (c) { return c.version + " · " + c.path; }).join(" / ") || t("CLI를 찾지 못했어요. 설치 후 다시 확인해 주세요.") };
+      await this.app.settings.load();
+      this.render(false);
+    } catch (error) { toast(error.message, true); button.disabled = false; }
+  }
+
+  backupSection() {
+    var self = this;
+    var input = h("input", { type: "file", accept: ".paperdesk,.zip", hidden: true, onchange: function () {
+      if (input.files.length) self.inspectBackup(input.files[0]);
+    } });
+    return h("div", { class: "group" }, h("div", { class: "field-row", style: "display:block" },
+      h("p", { class: "desc" }, t("백업에는 PDF·번역·메모·대화·설정이 포함돼요. API 키와 로그인 정보는 제외돼요. 암호화되지 않은 파일이므로 안전한 곳에 보관하세요.")),
+      h("button", { class: "btn", onclick: async function (event) {
+        var button = event.currentTarget; button.disabled = true;
+        try {
+          var result = await self.app.api.post("/api/backups/export");
+          var link = h("a", { href: result.url, download: "Paperdesk-backup.paperdesk" });
+          document.body.append(link); link.click(); link.remove();
+        } catch (error) { toast(error.message, true); }
+        finally { button.disabled = false; }
+      } }, t("전체 백업 저장")), " ",
+      h("button", { class: "btn", onclick: function () { input.click(); } }, t("백업 확인·복원")), input));
+  }
+
+  async inspectBackup(file) {
+    if (file.size > 200*1024*1024) { toast(t("화면에서 복원할 백업은 200MB까지 지원해요. 큰 백업은 CLI로 복원해 주세요."), true); return; }
+    try {
+      var data = await this.app.api.request("POST", "/api/backups/inspect", file, { "Content-Type": "application/zip" });
+      var ok = await confirmDialog({ title: t("서재를 복원할까요?"), confirm: t("다음 실행에 복원"),
+        message: t("논문 {n}편의 백업을 확인했어요. 앱을 완전히 종료하고 다시 열면 현재 서재를 교체해요. 이전 서재는 복구용 폴더에 보존해요. 복원 전까지 추가한 작업은 새 서재에 포함되지 않아요. AI 연결은 다시 확인해 주세요.", { n: data.documents }) });
+      if (!ok) return;
+      await this.app.api.post("/api/backups/restore", { token: data.token });
+      toast(t("복원을 예약했어요. 앱을 완전히 종료한 뒤 다시 열어 주세요."));
     } catch (error) { toast(error.message, true); }
   }
 

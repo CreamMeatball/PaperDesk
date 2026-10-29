@@ -220,7 +220,7 @@ export class ReferenceIndex {
 
 // ---------- Hover controller + popover ----------
 
-var SHOW_DELAY = 220, HIDE_DELAY = 260;
+var SHOW_DELAY = 220, HIDE_DELAY = 140;
 
 export class CitationPreview {
   constructor(reader, app) {
@@ -232,15 +232,20 @@ export class CitationPreview {
     this.frame = 0;
     var self = this;
     reader.pagesEl.addEventListener("mousemove", this.onMove);
-    reader.pagesEl.addEventListener("mouseleave", function () { self.scheduleHide(); });
+    reader.pagesEl.addEventListener("mouseleave", function () { cancelAnimationFrame(self.frame); self.frame = 0; self.scheduleHide(); });
     reader.pagesEl.addEventListener("scroll", function () { self.hide(); }, { passive: true });
   }
 
-  destroy() { this.hide(true); }
+  destroy() { cancelAnimationFrame(this.frame); this.hide(); }
 
   onMove(event) {
     if (event.buttons || this.reader.area.active) return;
-    if (event.target.closest && event.target.closest(".tcol, .layer.over")) return; // cards handle their own refs
+    if (event.target.closest && event.target.closest(".tcol, .layer.over")) {
+      var ref = event.target.closest(".xref");
+      if (ref) this.showForElement(ref, this.reader.translation.resolveRef(ref));
+      else if (!this.overPopover) this.scheduleHide();
+      return;
+    }
     var self = this, x = event.clientX, y = event.clientY, target = event.target;
     if (this.frame) return;
     this.frame = requestAnimationFrame(function () {
@@ -279,10 +284,15 @@ export class CitationPreview {
 
   schedule(hit) {
     clearTimeout(this.hideTimer);
+    this.hideTimer = null;
     if (this.current && (this.current.spot === hit.spot || (hit.element && this.current.element === hit.element))) return;
+    if (this.pendingHit && (this.pendingHit.spot === hit.spot || (hit.element && this.pendingHit.element === hit.element))) return;
     var self = this;
+    this.pendingHit = hit;
     clearTimeout(this.showTimer);
     this.showTimer = setTimeout(function () {
+      self.pendingHit = null;
+      if (!self.reader.alive) return;
       if (window.getSelection && !window.getSelection().isCollapsed) return;
       self.show(hit);
     }, SHOW_DELAY);
@@ -290,15 +300,18 @@ export class CitationPreview {
 
   scheduleHide() {
     clearTimeout(this.showTimer);
+    this.pendingHit = null;
     if (!this.popover) { this.current = null; return; }
+    if (this.hideTimer) return;
     var self = this;
-    clearTimeout(this.hideTimer);
     this.hideTimer = setTimeout(function () { self.hide(); }, HIDE_DELAY);
   }
 
   hide() {
     clearTimeout(this.showTimer);
     clearTimeout(this.hideTimer);
+    this.showTimer = this.hideTimer = null;
+    this.pendingHit = null;
     if (this.popover) this.popover.remove();
     this.popover = null;
     this.current = null;
@@ -311,13 +324,13 @@ export class CitationPreview {
     this.current = hit;
     if (hit.spot.kind === "visual") {
       content = this.reader.visuals.previewContent(hit.spot.target, hit.page);
-      if (!content) return; // same page: the target flashed in place
+      if (!content) return;
     } else {
       content = [hit.spot.entries.slice(0, 4).map(function (entry) { return self.renderEntry(entry, hit.spot); }),
         hit.spot.entries.length > 4 ? h("div", { class: "cite-more" }, t("외 {n}편", { n: hit.spot.entries.length - 4 })) : null];
     }
     var box = h("div", { class: "cite-pop" + (hit.spot.kind === "visual" ? " visual" : ""), role: "dialog", "aria-label": t("미리보기"),
-      onmouseenter: function () { self.overPopover = true; clearTimeout(self.hideTimer); },
+      onmouseenter: function () { self.overPopover = true; clearTimeout(self.hideTimer); self.hideTimer = null; },
       onmouseleave: function () { self.overPopover = false; self.scheduleHide(); } }, content);
     document.body.append(box);
     this.popover = box;

@@ -11,6 +11,7 @@ import { askText, confirmDialog, h, icon, modKey, toast } from "./js/ui.js";
 import { pdfFiles } from "./js/dnd.js";
 import { locale, setLocale, t } from "./js/i18n.js";
 import { migrateLegacy, pref, setPref } from "./js/prefs.js";
+import { shortcutKey, dialogOpen } from "./js/keyboard.js";
 
 var VIEWS = { library: LibraryView, reader: ReaderView, settings: SettingsView };
 
@@ -51,13 +52,19 @@ class App {
   async start() {
     if (location.pathname === "/") this.router.go("/library", true);
     try {
-      await Promise.all([this.store.load(), this.settings.load()]);
+      await Promise.all([this.store.load(), this.settings.initialize()]);
     } catch (error) {
       toast(error.message, true);
     }
     await this.applyLanguage(this.settings.data ? this.settings.data.ui_language : "system", true);
+    if (window.paperdeskBoot && window.paperdeskBoot.restoreFailed) {
+      toast(t("백업 복원에 실패해 기존 서재를 열었어요. 백업 파일을 다시 확인해 주세요."), true);
+    }
     if (!this.settings.data || !this.settings.data.provider) {
       toast(t("설정에서 사용할 AI를 고르면 번역·설명을 쓸 수 있어요."));
+      this.router.go("/settings");
+    } else if (!this.settings.active().available) {
+      toast(t("선택한 AI에 연결할 수 없어요. 설정에서 로그인 상태를 확인해 주세요."), true);
     }
   }
 
@@ -242,8 +249,8 @@ class App {
 
   // ---- keyboard ----
   onShortcut(event) {
-    if (!modKey(event)) return;
-    var key = event.key.toLowerCase();
+    if (event.defaultPrevented || event.isComposing || event.altKey || dialogOpen() || !modKey(event)) return;
+    var key = shortcutKey(event);
     if (key === "k") { event.preventDefault(); if (this.sidebarHidden()) this.toggleSidebar(); this.sidebar.searchInput.focus(); }
     else if (key === "o") { event.preventDefault(); this.pickFiles(this.currentFolder()); }
     else if (key === ",") { event.preventDefault(); this.router.go("/settings"); }

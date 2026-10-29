@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from ..domain.errors import ProviderUnavailable
-from ..domain.models import Completion, Prompt, ProviderStatus
-from ..ports.ai import AIProvider, OptionField
-from .openai_responses import ResponsesClient
-from ..i18n import _
+from paperdesk.domain.errors import ProviderUnavailable
+from paperdesk.domain.models import Completion, Prompt, ProviderStatus
+from paperdesk.ports.ai import AIProvider, OptionField
+from paperdesk.providers.openai_responses import ResponsesClient
+from paperdesk.i18n import _
 
 
 class ChatGPTPlanProvider(AIProvider):

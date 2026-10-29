@@ -31,7 +31,11 @@ class NoCli(CommandRunner):
     def run(self, argv, *, input_text, cwd, timeout):
         return CommandResult(1, '', 'CLI disabled for offline verification')
 
-app = Application.build(paths=AppPaths(Path(sys.argv[1])), runner=NoCli())
+from paperdesk.providers.registry import default_registry
+from tests.fixtures import DemoProvider
+registry = default_registry()
+registry.register(DemoProvider)
+app = Application.build(paths=AppPaths(Path(sys.argv[1])), runner=NoCli(), registry=registry)
 if not app.library.list():
     from tests.helpers import make_pdf
     fixture = os.environ.get('PAPERDESK_TEST_PDF')

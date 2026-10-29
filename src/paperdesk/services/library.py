@@ -13,17 +13,18 @@ from ..i18n import _
 
 MAX_PDF_BYTES = 200 * 1024 * 1024
 MAX_NAME = 120
+MAX_PAPER_TITLE = 300
 
 
 def _new_id() -> str:
     return uuid.uuid4().hex
 
 
-def _clean_name(value: str, empty: str, too_long: str) -> str:
+def _clean_name(value: str, empty: str, too_long: str, *, limit: int = MAX_NAME) -> str:
     name = " ".join(str(value or "").split())
     if not name:
         raise InvalidInput(empty)
-    if len(name) > MAX_NAME:
+    if len(name) > limit:
         raise InvalidInput(too_long)
     return name
 
@@ -33,7 +34,7 @@ def _folder_name(value: str) -> str:
 
 
 def _paper_title(value: str) -> str:
-    return _clean_name(value, _("논문 제목을 입력하세요."), _("논문 제목은 {n}자 이하로 해 주세요.", n=MAX_NAME))
+    return _clean_name(value, _("논문 제목을 입력하세요."), _("논문 제목은 {n}자 이하로 해 주세요.", n=MAX_PAPER_TITLE), limit=MAX_PAPER_TITLE)
 
 
 class FolderService:
@@ -172,8 +173,10 @@ class LibraryService:
         title = Path(name).stem.replace("_", " ").strip() or "Untitled"
         document = Document(self._new_id(), title[:MAX_NAME], name, digest, len(data), self._clock(), folder_id=folder)
         self._blobs.put(self.blob_key(document.id), data)
-        self._documents.add(document)
-        return document, True
+        stored = self._documents.add(document)
+        if stored.id != document.id:
+            self._blobs.delete(self.blob_key(document.id))
+        return stored, stored.id == document.id
 
     def pdf_path(self, doc_id: str) -> Path:
         self.get(doc_id)

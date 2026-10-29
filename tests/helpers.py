@@ -9,6 +9,8 @@ from paperdesk.infrastructure.secrets import MemorySecretStore
 from paperdesk.infrastructure.settings_store import MemorySettingsStore
 from paperdesk.platforms import LinuxPlatform
 from paperdesk.ports.settings import Settings
+from paperdesk.providers.registry import default_registry
+from .fixtures import DemoProvider
 
 
 def make_pdf(lines: list[str]) -> bytes:
@@ -41,11 +43,14 @@ def make_pdf(lines: list[str]) -> bytes:
 
 def build_app(**overrides) -> tuple[Application, tempfile.TemporaryDirectory]:
     folder = tempfile.TemporaryDirectory()
+    registry = default_registry()
+    registry.register(DemoProvider)
     options = dict(
         paths=AppPaths(Path(folder.name)),
         secrets=MemorySecretStore(),
         settings_store=MemorySettingsStore(Settings(target_language="Korean")),
         platform=LinuxPlatform(),
+        registry=registry,
     )
     options.update(overrides)
     return Application.build(**options), folder

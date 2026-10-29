@@ -62,6 +62,23 @@ class LibraryTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def test_simultaneous_import_of_same_pdf_returns_one_document_without_orphan_files(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+        from unittest.mock import patch
+        barrier=Barrier(2)
+        repository=self.library._documents
+        original=repository.find_by_sha256
+        def both_see_missing(digest):
+            result=original(digest);barrier.wait(timeout=3);return result
+        raw=make_pdf(['Concurrent upload.'])
+        with patch.object(repository,'find_by_sha256',side_effect=both_see_missing),ThreadPoolExecutor(max_workers=2) as pool:
+            results=list(pool.map(lambda _:self.library.import_pdf('same.pdf',raw),range(2)))
+        self.assertEqual(len({doc.id for doc,created in results}),1)
+        self.assertEqual(sorted(created for doc,created in results),[False,True])
+        self.assertEqual(len(self.library.list()),1)
+        self.assertEqual(len(list(self.app.paths.blobs.rglob('*.pdf'))),1)
+
     def test_import_rejects_non_pdf_and_deduplicates(self):
         with self.assertRaises(InvalidInput):
             self.library.import_pdf("x.pdf", b"hello")
@@ -90,3 +107,20 @@ class LibraryTests(unittest.TestCase):
         with self.assertRaises(NotFound):
             self.library.get(doc.id)
 
+
+
+class LongPaperTitleTests(unittest.TestCase):
+    def test_long_title_can_be_saved_without_changing_the_original_pdf(self):
+        app,tmp=build_app()
+        self.addCleanup(tmp.cleanup)
+        raw=make_pdf(['A long scientific title'])
+        doc,_=app.library.import_pdf('submission_2026.pdf',raw)
+        title='A comprehensive account of scientific reading and reproducibility across heterogeneous datasets, model families, and independently trained experimental systems'
+        renamed=app.library.rename(doc.id,title)
+        self.assertEqual(renamed.title,title)
+        self.assertEqual(renamed.filename,'submission_2026.pdf')
+        self.assertEqual(app.library.pdf_path(doc.id).read_bytes(),raw)
+        with self.assertRaises(InvalidInput):app.library.rename(doc.id,'a'*301)
+        duplicate,created=app.library.import_pdf('another_name.pdf',raw)
+        self.assertFalse(created)
+        self.assertEqual(duplicate.title,title)

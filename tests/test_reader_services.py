@@ -69,6 +69,27 @@ class TranslationTests(unittest.TestCase):
         self.assertEqual(len(ScriptedProvider.prompts), 1)
         self.assertEqual(set(self.app.translations.list(self.doc.id)["blocks"]), {"1:abc123", "1:def456"})
 
+    def test_structured_translation_prompt_is_enforced_by_codex_cli(self):
+        import tempfile
+        from pathlib import Path
+        from paperdesk.providers.codex_cli import CodexCliProvider
+        from .test_providers import context
+        self.app.translations.translate(self.doc.id,self.app.translations.parse_blocks([{'key':'1:abc123','sentences':['First.','Second.']}]))
+        prompt=ScriptedProvider.prompts[0]
+        self.assertEqual(prompt.response_schema['required'],['blocks'])
+        provider=CodexCliProvider(context('codex-cli'))
+        with tempfile.TemporaryDirectory() as folder:
+            command=provider.build_command('/bin/codex',prompt,Path(folder))
+            index=command.index('--output-schema')
+            self.assertEqual(json.loads(Path(command[index+1]).read_text()),prompt.response_schema)
+
+    def test_malformed_json_is_not_saved_as_a_successful_paragraph(self):
+        ScriptedProvider.replies=['{"blocks": INVALID}']
+        block=self.app.translations.parse_blocks([{'key':'1:aaaa','sentences':['One.']}])
+        result=self.app.translations.translate(self.doc.id,block)
+        self.assertEqual(result['missing'],['1:aaaa'])
+        self.assertEqual(self.app.translations.list(self.doc.id)['blocks'],{})
+
     def test_changed_text_is_retranslated_and_bad_input_rejected(self):
         self.app.translations.translate(self.doc.id, self.app.translations.parse_blocks([{"key": "2:aaaa", "sentences": ["A.", "B."]}]))
         ScriptedProvider.replies.append(json.dumps({"blocks": [{"id": "0", "sentences": ["다른 글."]}]}))

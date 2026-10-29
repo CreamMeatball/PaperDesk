@@ -59,7 +59,7 @@ class SettingsTests(unittest.TestCase):
     def test_view_lists_every_provider_with_option_schema(self):
         view = self.settings.view()
         ids = [p["id"] for p in view["providers"]]
-        for expected in ("codex-cli", "claude-code", "chatgpt-plan", "openai-api", "anthropic-api", "ollama", "openai-compatible", "demo"):
+        for expected in ("codex-cli", "claude-code", "openai-api", "anthropic-api", "ollama", "openai-compatible", "demo"):
             self.assertIn(expected, ids)
         ollama = next(p for p in view["providers"] if p["id"] == "ollama")
         self.assertEqual([o["key"] for o in ollama["options"]], ["base_url", "model", "api_key"])

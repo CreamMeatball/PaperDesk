@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import re
 
-from ..domain.models import Completion, Prompt, ProviderStatus
-from ..i18n import _
-from ..ports.ai import AIProvider
+from paperdesk.domain.models import Completion, Prompt, ProviderStatus
+from paperdesk.ports.ai import AIProvider
 
 
 DEMO_TEXT = {
@@ -19,10 +18,10 @@ class DemoProvider(AIProvider):
     """Offline stand-in so the UI can be tried and tested without any account. Never calls a model."""
 
     id = "demo"
-    label = _("체험 모드 (AI 없음)")
+    label = "Offline test provider"
     kind = "offline"
     supports_images = True
-    description = _("실제 AI를 부르지 않고 화면 흐름만 보여 줍니다. 결과는 입력 일부를 되돌려 준 예시입니다.")
+    description = "Deterministic responses for automated tests only."
 
     @staticmethod
     def _fake_blocks(user: str) -> str:
@@ -33,7 +32,7 @@ class DemoProvider(AIProvider):
                                       for b in payload["blocks"]]}, ensure_ascii=False)
 
     def status(self) -> ProviderStatus:
-        return ProviderStatus(True, _("오프라인 · 비용 없음"))
+        return ProviderStatus(True, "Local test fixture")
 
     def complete(self, prompt: Prompt) -> Completion:
         found = re.search(r"<(passage|paper)>\s*(.*?)\s*</\1>", prompt.user, re.S)

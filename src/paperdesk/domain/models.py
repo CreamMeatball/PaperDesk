@@ -119,6 +119,7 @@ class Prompt:
     system: str
     user: str
     images: tuple[ImageInput, ...] = ()
+    response_schema: dict | None = None
 
     def as_single_text(self) -> str:
         """For backends that accept only one message, such as codex exec."""

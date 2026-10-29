@@ -1,7 +1,7 @@
 import { pref, setPref } from "./prefs.js";
 import { h, icon, iconButton, toast, MOD, modKey } from "./ui.js";
 import { CitationPreview, ReferenceIndex } from "./references.js";
-import { analyzeDocument } from "./layout.js";
+import { analyzeDocling } from "./layout.js";
 import { TextMap } from "./textmap.js";
 import { TranslationController } from "./translation.js";
 import { Visuals } from "./visuals.js";
@@ -10,17 +10,9 @@ import { FindBar } from "./find.js";
 import { Navigator } from "./navigator.js";
 import { AreaSelect } from "./area.js";
 import { t } from "./i18n.js";
+import { shortcutKey, isTypingTarget, dialogOpen } from "./keyboard.js";
 
-var pdfjsPromise = null;
-export function loadPdfjs() {
-  if (!pdfjsPromise) {
-    pdfjsPromise = import("/vendor/pdfjs/pdf.min.mjs").then(function (lib) {
-      lib.GlobalWorkerOptions.workerSrc = "/vendor/pdfjs/pdf.worker.min.mjs";
-      return lib;
-    });
-  }
-  return pdfjsPromise;
-}
+import { loadPdfjs, extractPdfTitle } from "./pdf.js";
 
 var MIN_ZOOM = 0.5, MAX_ZOOM = 3, GAP = 18, TCOL_RATIO = 0.72;
 
@@ -62,6 +54,8 @@ export class ReaderView {
 
   destroy() {
     this.alive = false;
+    clearTimeout(this.selectionTimer);
+    clearTimeout(this.analysisTimer);
     if (this.observer) this.observer.disconnect();
     document.removeEventListener("selectionchange", this.onSelection);
     document.removeEventListener("keydown", this.onKey);
@@ -110,7 +104,7 @@ export class ReaderView {
       h("span", { class: "tb-sep" }),
       iconButton("panel", t("AI 도우미 ({key})", { key: MOD + "J" }), function () { app.toggleAssistant(); }));
     this.pagesEl.addEventListener("scroll", function () { self.onScroll(); }, { passive: true });
-    this.readerEl.replaceChildren(toolbar, this.bodyEl);
+    this.readerEl.replaceChildren(toolbar, this.translation.status, this.bodyEl);
     this.root.replaceChildren(this.readerEl);
     document.addEventListener("selectionchange", this.onSelection);
     document.addEventListener("keydown", this.onKey);
@@ -126,13 +120,16 @@ export class ReaderView {
       this.titleEl.textContent = this.doc.title;
       var lib = await loadPdfjs();
       this.lib = lib;
-      this.pdf = await lib.getDocument({ url: "/api/documents/" + this.id + "/file", isEvalSupported: false }).promise;
+      this.pdf = await lib.getDocument({ url: "/api/documents/" + this.id + "/file", isEvalSupported: false,
+        maxImageSize: 25000000, canvasMaxAreaInBytes: 64*1024*1024 }).promise;
       if (!this.alive) { this.pdf.destroy(); return; }
+      if (this.pdf.numPages > 500) throw new Error(t("베타에서는 500쪽까지의 PDF를 지원해요."));
       this.adoptEmbeddedTitle();
       var sizes = [];
       for (var n = 1; n <= this.pdf.numPages; n++) {
         var page = await this.pdf.getPage(n);
         var viewport = page.getViewport({ scale: 1 });
+        if (viewport.width > 14400 || viewport.height > 14400) throw new Error(t("PDF의 쪽 크기가 지원 범위를 넘어요."));
         sizes.push({ width: viewport.width, height: viewport.height });
       }
       if (!this.alive) return;
@@ -142,19 +139,19 @@ export class ReaderView {
       this.extractText();
     } catch (error) {
       if (!this.alive) return;
-      this.pagesEl.replaceChildren(h("div", { class: "loading" }, t("PDF를 열지 못했어요: {error}", { error: error.message || error })));
+      var message = error.name === "PasswordException" ? t("암호화 PDF는 아직 지원하지 않아요. 암호가 없는 사본으로 열어 주세요.") : error.message || error;
+      this.pagesEl.replaceChildren(h("div", { class: "loading" }, t("PDF를 열지 못했어요: {error}", { error: message })));
       if (error.status === 404) { toast(t("논문을 찾지 못했어요."), true); app.backToLibrary(); }
     }
   }
 
-  // Imported files are titled after their filename; on first open, prefer the title stored inside the PDF.
+  // Upgrade older imports still named after their filename; keep manually chosen titles.
   async adoptEmbeddedTitle() {
     var doc = this.doc, stem = doc.filename.replace(/\.pdf$/i, "").replace(/_/g, " ").trim();
     if (doc.title !== stem) return;
     try {
-      var meta = await this.pdf.getMetadata();
-      var title = ((meta.info && meta.info.Title) || "").replace(/\s+/g, " ").trim();
-      if (title.length < 6 || title.length > 200 || /^(untitled|microsoft word|title|paper)\b/i.test(title) || /\.(pdf|docx?|tex)$/i.test(title)) return;
+      var title = await extractPdfTitle(this.pdf, doc.filename);
+      if (!title) return;
       await this.app.store.renameDocument(doc.id, title);
       this.doc.title = title;
       if (this.alive) this.titleEl.textContent = title;
@@ -176,7 +173,7 @@ export class ReaderView {
       var el = h("div", { class: "page", "data-page": String(number) },
         h("canvas"), h("div", { class: "layer marks" }), h("div", { class: "layer flash" }), h("div", { class: "textLayer" }),
         h("div", { class: "layer over" }), h("div", { class: "layer ui" }), h("span", { class: "page-no" }, String(number)));
-      var tcol = h("div", { class: "tcol" });
+      var tcol = h("div", { class: "tcol", tabindex: "0", role: "region", "aria-label": t("{n}쪽 번역", { n: number }) });
       var row = h("div", { class: "page-row", "data-page": String(number) }, el, tcol);
       return { number: number, size: size, el: el, tcol: tcol, row: row, rendered: 0, busy: false, hotspots: [] };
     });
@@ -203,7 +200,7 @@ export class ReaderView {
       p.el.style.setProperty("--user-unit", "1");
       p.el.style.setProperty("--total-scale-factor", scale);
       p.tcol.style.width = side ? Math.max(260, Math.round(width * TCOL_RATIO)) + "px" : "0px";
-      p.tcol.style.minHeight = height + "px";
+      p.tcol.style.height = height + "px";
     });
     this.zoomLabel.textContent = Math.round(this.zoom * 100) + "%";
   }
@@ -250,17 +247,19 @@ export class ReaderView {
   async renderPage(state) {
     if (!state || !this.pdf || state.rendered === this.scale || state.busy) return;
     state.busy = true;
-    var scale = this.scale, self = this;
+    var scale = this.scale, self = this, failed = false;
     try {
       var page = await this.pdf.getPage(state.number);
       var viewport = page.getViewport({ scale: scale });
-      var ratio = Math.min(window.devicePixelRatio || 1, 2);
+      var ratio = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(16000000/(viewport.width*viewport.height)));
       var canvas = document.createElement("canvas");
       canvas.width = Math.floor(viewport.width * ratio);
       canvas.height = Math.floor(viewport.height * ratio);
       await page.render({ canvasContext: canvas.getContext("2d"), viewport: viewport,
         transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : null }).promise;
       if (!this.alive || scale !== this.scale) return;
+      var oldError = state.el.querySelector(".page-error");
+      if (oldError) oldError.remove();
       state.el.querySelector("canvas").replaceWith(canvas);
       var layer = state.el.querySelector(".textLayer");
       layer.replaceChildren();
@@ -270,10 +269,14 @@ export class ReaderView {
       this.reindex(state);
       this.each("onPageRender", state);
     } catch (error) {
-      if (!error || error.name !== "RenderingCancelledException") console.warn(error);
+      if (!error || error.name !== "RenderingCancelledException") {
+        failed = true;
+        if (!state.el.querySelector(".page-error")) state.el.append(h("div", { class: "page-error loading" }, t("이 쪽을 렌더링하지 못했어요.")));
+        console.warn(error);
+      }
     } finally {
       state.busy = false;
-      if (this.alive && state.rendered !== this.scale && this.visiblePages().indexOf(state) >= 0) {
+      if (!failed && this.alive && state.rendered !== this.scale && this.visiblePages().indexOf(state) >= 0) {
         setTimeout(function () { self.renderPage(state); }, 30);
       }
     }
@@ -326,26 +329,53 @@ export class ReaderView {
       for (var n = 1; n <= this.pdf.numPages; n++) {
         var page = await this.pdf.getPage(n);
         var content = await page.getTextContent();
-        layout.push({ width: page.view[2] - page.view[0], height: page.view[3] - page.view[1], view: page.view, items: content.items });
+        layout.push({ width: page.view[2] - page.view[0], height: page.view[3] - page.view[1], view: page.view, items: content.items, styles: content.styles });
         texts.push(content.items.map(function (item) { return (item.str || "") + (item.hasEOL ? "\n" : " "); }).join("")
           .replace(/[ \t]+\n/g, "\n").replace(/ {2,}/g, " ").trim());
         if (!this.alive) return;
       }
       this.texts = texts;
+      if (!texts.some(function (text) { return text.trim(); })) toast(t("추출할 글자가 없어요. 스캔 PDF의 OCR은 아직 지원하지 않아요."));
       this.references = ReferenceIndex.build(layout);
-      this.analysis = analyzeDocument(layout);
-      var self = this;
-      this.each("onAnalysis");
-      this.app.assistant.onAnalysis();
-      this.pages.forEach(function (p) {
-        if (p.rendered && p.map) { self.reindex(p); self.each("onPageRender", p); }
-      });
+      this.layout = layout;
+      this.startAnalysis();
       if (!this.doc || this.doc.text_pages !== texts.length) {
         await this.app.api.put("/api/documents/" + this.id + "/text", { pages: texts });
         this.app.store.load();
       }
     } catch (error) {
       console.warn("text extraction failed", error);
+    }
+  }
+
+  async startAnalysis(retry) {
+    this.analysisError = false;
+    this.analysisPhase = "queued";
+    this.translation.updateLabel();
+    try {
+      var data = await this.app.api.post("/api/documents/" + this.id + "/analysis", { retry: !!retry });
+      this.acceptAnalysis(data);
+    } catch (error) { this.analysisError = true; this.translation.updateLabel(); console.warn(error); }
+  }
+
+  acceptAnalysis(data) {
+    if (!this.alive) return;
+    if (data.state === "completed") {
+      this.analysis = analyzeDocling(this.layout, data.layout);
+      this.analysisPhase = null;
+      this.each("onAnalysis");
+      this.app.assistant.onAnalysis();
+      this.pages.forEach((p) => { if (p.rendered && p.map) { this.reindex(p); this.each("onPageRender", p); } });
+    } else if (data.state === "failed") {
+      this.analysisError = true;
+      this.translation.updateLabel();
+    } else {
+      this.analysisPhase = data.state;
+      this.translation.updateLabel();
+      this.analysisTimer = setTimeout(async () => {
+        try { this.acceptAnalysis(await this.app.api.get("/api/documents/" + this.id + "/analysis")); }
+        catch (error) { this.analysisError = true; this.translation.updateLabel(); console.warn(error); }
+      }, 1000);
     }
   }
 
@@ -406,14 +436,16 @@ export class ReaderView {
     return out.toDataURL("image/png");
   }
 
-  flashRect(pageNumber, rect, scroll) {
+  flashRect(pageNumber, rect, scroll, pulse) {
     var state = this.pages[pageNumber - 1];
     if (!state) return;
     if (scroll) this.goToPage(pageNumber, rect[1]);
     var layer = state.el.querySelector(".layer.flash");
-    var box = h("div", { class: "flash-box", style: "left:" + rect[0] * 100 + "%;top:" + rect[1] * 100 + "%;width:" + (rect[2] - rect[0]) * 100 + "%;height:" + (rect[3] - rect[1]) * 100 + "%" });
+    var box = h("div", { class: pulse ? "reference-pulse" : "flash-box", style: "left:" + rect[0] * 100 + "%;top:" + rect[1] * 100 + "%;width:" + (rect[2] - rect[0]) * 100 + "%;height:" + (rect[3] - rect[1]) * 100 + "%" });
+    if (pulse) layer.querySelectorAll(".reference-pulse").forEach(function (previous) { previous.remove(); });
     layer.append(box);
-    setTimeout(function () { box.remove(); }, 1700);
+    box.addEventListener("animationend", function () { box.remove(); });
+    setTimeout(function () { box.remove(); }, pulse ? 950 : 1700);
   }
 
   // ---------- selection menu ----------
@@ -436,9 +468,11 @@ export class ReaderView {
   }
 
   onSelection() {
+    if (window.getSelection().isCollapsed) this.pages.forEach((p) => { if (p.translationDeferred) this.translation.renderPage(p); });
     clearTimeout(this.selectionTimer);
     var self = this;
     this.selectionTimer = setTimeout(function () {
+      if (!self.alive) return;
       var info = self.selectionInfo();
       if (info) self.showMenu(info); else if (!self.menuPinned) self.hideMenu();
     }, 180);
@@ -496,13 +530,18 @@ export class ReaderView {
   }
 
   onKey(event) {
-    if (modKey(event) && event.key.toLowerCase() === "f") { event.preventDefault(); this.find.open(); return; }
-    var target = event.target;
-    var typing = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+    if (event.defaultPrevented || dialogOpen()) return;
+    var key = shortcutKey(event), typing = isTypingTarget(event.target);
+    if (modKey(event) && !event.altKey && !event.isComposing && key === "f") {
+      event.preventDefault(); this.find.open(); return;
+    }
     if (event.key === "Escape" && !typing) { this.hideMenu(); this.area.exit(); return; }
-    if (!this.menu || event.metaKey || event.ctrlKey || event.altKey || typing) return;
+    if (event.metaKey || event.ctrlKey || event.altKey || event.repeat || typing) return;
     var map = { t: "translate", e: "explain", w: "define", q: "ask", h: "highlight", c: "note", enter: "ask" };
-    var action = map[event.key.toLowerCase()];
-    if (action) { event.preventDefault(); this.runSelection(action, this.selection); }
+    var action = map[key];
+    if (!action) return;
+    // Selection is available immediately; the toolbar is intentionally delayed. Never use its stale snapshot.
+    var info = this.selectionInfo();
+    if (info) { event.preventDefault(); this.runSelection(action, info); }
   }
 }

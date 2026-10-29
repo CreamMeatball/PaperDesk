@@ -5,17 +5,52 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+import re
 from abc import abstractmethod
 from pathlib import Path
 from typing import Callable, ClassVar
 
-from ..domain.errors import ProviderFailed, ProviderUnavailable, ReaderError
+from ..domain.errors import (ProviderFailed, ProviderUnavailable, ReaderError, ProviderAuthRequired,
+                             ProviderLimitReached, UnsupportedModel)
 from ..domain.models import Completion, Prompt, ProviderStatus
 from ..ports.ai import AIProvider, CommandResult, OptionField, ProviderContext
 from ..i18n import _
 
-# GUI-launched apps on macOS get a short PATH, so also look where installers usually put CLIs.
-COMMON_BIN_DIRS = ("/opt/homebrew/bin", "/usr/local/bin", "~/.local/bin", "~/.npm-global/bin", "~/bin")
+WINDOWS = os.name == "nt"
+# GUI-launched apps get a short PATH, so also look where installers usually put CLIs.
+COMMON_BIN_DIRS = (("%APPDATA%/npm", "~/.local/bin", "%LOCALAPPDATA%/Microsoft/WinGet/Links") if WINDOWS else
+                   ("/opt/homebrew/bin", "/usr/local/bin", "~/.local/bin", "~/.npm-global/bin", "~/bin"))
+# npm's .cmd shim for a CLI that ships a native binary only starts that .exe.
+_SHIM_EXE = re.compile(r'"%dp0%\\([^"%]+\.exe)"', re.I)
+
+
+def _folders(entries) -> list[Path]:
+    """Expand ~, %VARS% and versioned folders such as .../bin/* (most recently installed first)."""
+    folders = []
+    for entry in entries:
+        path = Path(os.path.expandvars(entry)).expanduser()
+        if "*" not in path.name:
+            folders.append(path)
+        elif path.parent.is_absolute():
+            folders += sorted((p for p in path.parent.glob(path.name) if p.is_dir()), key=lambda p: p.stat().st_mtime, reverse=True)
+    return folders
+
+
+def _names(executable: str) -> tuple[str, ...]:
+    # On Windows a bare name is npm's POSIX shell script, which CreateProcess cannot run.
+    return (executable + ".exe", executable + ".cmd") if WINDOWS else (executable,)
+
+
+def direct(path: str) -> str:
+    """Run the .exe behind an npm shim directly, so arguments never pass through cmd.exe."""
+    if not path.lower().endswith(".cmd"):
+        return path
+    try:
+        match = _SHIM_EXE.search(Path(path).read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return path
+    target = Path(path).parent.joinpath(*match.group(1).split("\\")) if match else None
+    return str(target) if target and target.is_file() else path
 
 
 def binary_option(executable: str) -> OptionField:
@@ -38,15 +73,40 @@ class CliProvider(AIProvider):
         custom = self.option("binary")
         if custom:
             path = Path(custom).expanduser()
-            return str(path) if path.is_file() and os.access(path, os.X_OK) else None
+            return direct(str(path)) if path.is_file() and os.access(path, os.X_OK) else None
         found = self._which(self.executable)
         if found:
-            return found
-        for folder in (*self.extra_dirs, *COMMON_BIN_DIRS):
-            path = Path(folder).expanduser() / self.executable
-            if path.is_file() and os.access(path, os.X_OK):
-                return str(path)
+            return direct(found)
+        for path in self._installed():
+            if os.access(path, os.X_OK):
+                return direct(str(path))
         return None
+
+    def _installed(self) -> list[Path]:
+        return [folder / name for folder in _folders((*self.extra_dirs, *COMMON_BIN_DIRS))
+                for name in _names(self.executable) if (folder / name).is_file()]
+
+    def discover(self) -> dict:
+        paths = []
+        located = self.locate()
+        for candidate in [located, *(direct(str(path)) for path in self._installed())]:
+            if candidate and candidate not in paths and Path(candidate).is_file():
+                paths.append(candidate)
+        candidates = []
+        for path in paths:
+            try:
+                with tempfile.TemporaryDirectory(prefix='paperdesk-version-') as folder:
+                    done = self.context.runner.run([path, '--version'], input_text='', cwd=Path(folder), timeout=5)
+                match = re.search(r'\d+\.\d+(?:\.\d+)?', done.stdout)
+                if done.returncode == 0 and match:
+                    version = match.group()
+                    candidates.append({'path': path, 'version': version})
+            except ReaderError:
+                continue
+        candidates.sort(key=lambda c: tuple(int(n) for n in c['version'].split('.')), reverse=True)
+        selected = self.option('binary') or (candidates[0]['path'] if candidates else located)
+        models = self.context.runner.codex_models(direct(selected)) if selected and self.id == 'codex-cli' else []
+        return {'candidates': candidates, 'selected': selected, 'models': models}
 
     def status(self) -> ProviderStatus:
         path = self.locate()
@@ -58,7 +118,7 @@ class CliProvider(AIProvider):
             with tempfile.TemporaryDirectory(prefix="paperdesk-") as folder:
                 result = self.context.runner.run([path, *self.login_args], input_text="", cwd=Path(folder), timeout=10)
         except ReaderError:
-            return ProviderStatus(True, _("{path} · 로그인 상태를 확인하지 못했어요", path=path))
+            return ProviderStatus(False, _("{path} · 로그인 상태를 확인하지 못했어요", path=path))
         logged_in, detail = self.interpret_login(result)
         return ProviderStatus(logged_in, _("{path} · {detail}", path=path, detail=detail))
 
@@ -78,7 +138,7 @@ class CliProvider(AIProvider):
                 timeout=self.timeout,
             )
             if result.returncode != 0:
-                raise ProviderFailed(self.failure_message(result))
+                raise self.failure(result)
             text = self.parse_output(result, workdir).strip()
         if not text:
             raise ProviderFailed(_("{name}가 빈 응답을 돌려줬어요.", name=self.label))
@@ -87,9 +147,19 @@ class CliProvider(AIProvider):
     def stdin_text(self, prompt: Prompt) -> str:
         return prompt.as_single_text()
 
-    def failure_message(self, result: CommandResult) -> str:
-        tail = " / ".join((result.stderr or result.stdout).strip().splitlines()[-4:])
-        return _("{name} 실행 실패 (코드 {code}): {tail}", name=self.label, code=result.returncode, tail=tail[:500])
+    def failure(self, result: CommandResult) -> ReaderError:
+        detail = (result.stderr + '\n' + result.stdout).lower()
+        if 'model_not_found' in detail or 'model is not supported' in detail or ('model' in detail and 'not supported' in detail):
+            return UnsupportedModel(_("선택한 모델을 사용할 수 없어요. 설치·모델 확인에서 지원 모델을 고르고 연결 시험을 해 주세요."))
+        if any(word in detail for word in ('hit your', 'rate_limit', 'rate limit', 'usage limit', 'quota')):
+            reset = re.search(r'resets\s+([0-9:apm. ]+(?:\([A-Za-z_/]+\))?)', result.stdout + result.stderr, re.I)
+            if reset:
+                return ProviderLimitReached(_("AI 사용 한도에 도달했어요. 초기화 안내: {reset}", reset=reset.group(1).strip()[:80]))
+            return ProviderLimitReached(_("AI 사용 한도에 도달했어요. 해당 AI에서 한도를 확인한 뒤 다시 시도해 주세요."))
+        if any(word in detail for word in ('authenticate', 'authentication', 'not logged', 'unauthorized', 'oauth', 'session expired')):
+            return ProviderAuthRequired(_("AI 로그인이 만료되었거나 필요해요. 해당 CLI에서 다시 로그인한 뒤 연결 시험을 해 주세요."))
+        return ProviderFailed(_("{name} 요청에 실패했어요 (코드 {code}). 연결 시험과 네트워크 상태를 확인해 주세요.",
+                                name=self.label, code=result.returncode))
 
     @abstractmethod
     def build_command(self, path: str, prompt: Prompt, workdir: Path) -> list[str]: ...

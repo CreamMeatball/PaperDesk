@@ -1,5 +1,6 @@
 import { pref, setPref } from "./prefs.js";
 import { t } from "./i18n.js";
+import { titleFromFile } from "./pdf.js";
 // Client-side model of the library: folders + documents, with tree helpers. Views listen for "change".
 
 function normalize(text) { return String(text || "").replace(/\u00ad/g, "").replace(/\s+/g, " ").trim(); }
@@ -110,7 +111,13 @@ export class LibraryStore extends EventTarget {
     for (var i = 0; i < files.length; i++) {
       try {
         var result = await this.api.upload(files[i], folderId);
-        if (result.created) added++; else existing++;
+        if (result.created) {
+          added++;
+          try {
+            var title = await titleFromFile(files[i]);
+            if (title) await this.api.patch("/api/documents/" + result.document.id, { title: title });
+          } catch (error) { console.warn("Imported PDF title lookup failed", error); }
+        } else existing++;
       } catch (error) {
         failed.push(files[i].name + ": " + error.message);
       }
@@ -128,6 +135,11 @@ export class SettingsModel extends EventTarget {
   }
   async load() {
     this.data = await this.api.get("/api/settings");
+    this.dispatchEvent(new Event("change"));
+    return this.data;
+  }
+  async initialize() {
+    this.data = await this.api.post("/api/settings/initialize-ai", {});
     this.dispatchEvent(new Event("change"));
     return this.data;
   }

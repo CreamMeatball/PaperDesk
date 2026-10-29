@@ -7,6 +7,8 @@ from ..app import Application
 from ..domain.errors import InvalidInput, NotFound
 import base64
 import re
+import tempfile
+from pathlib import Path
 
 from ..domain.models import AssistRequest, AssistTask, ImageInput
 from .http import Request, Response, Router
@@ -25,6 +27,7 @@ class ApiController:
         routes = [
             ("GET", "/api/health", self.health),
             ("GET", "/api/library", self.library),
+            ("GET", "/api/activity", self.activity),
             ("GET", "/api/search", self.search),
             ("POST", "/api/documents", self.upload),
             ("GET", "/api/documents/{doc_id}", self.document),
@@ -32,6 +35,8 @@ class ApiController:
             ("DELETE", "/api/documents/{doc_id}", self.delete_document),
             ("GET", "/api/documents/{doc_id}/file", self.document_file),
             ("POST", "/api/documents/{doc_id}/open", self.open_document),
+            ("GET", "/api/documents/{doc_id}/analysis", self.analysis_status),
+            ("POST", "/api/documents/{doc_id}/analysis", self.start_analysis),
             ("PUT", "/api/documents/{doc_id}/text", self.save_text),
             ("POST", "/api/folders", self.create_folder),
             ("PATCH", "/api/folders/{folder_id}", self.update_folder),
@@ -53,12 +58,23 @@ class ApiController:
             ("DELETE", "/api/annotations/{annotation_id}", self.delete_annotation),
             ("GET", "/api/documents/{doc_id}/translations", self.translations),
             ("POST", "/api/documents/{doc_id}/translations", self.translate_blocks),
+            ("GET", "/api/documents/{doc_id}/translation-jobs", self.translation_jobs),
+            ("POST", "/api/documents/{doc_id}/translation-jobs", self.create_translation_job),
+            ("POST", "/api/translation-jobs/{job_id}/{action}", self.translation_job_action),
             ("POST", "/api/references/explain", self.explain_reference),
             ("POST", "/api/reading-list/{item_id}/find-arxiv", self.reading_find_arxiv),
             ("GET", "/api/settings", self.settings),
+            ("POST", "/api/settings/initialize-ai", self.initialize_ai),
             ("PUT", "/api/settings", self.update_settings),
             ("PUT", "/api/providers/{provider_id}", self.update_provider),
             ("POST", "/api/providers/{provider_id}/test", self.test_provider),
+            ("POST", "/api/providers/{provider_id}/discover", self.discover_provider),
+            ("GET", "/api/providers/{provider_id}/models", self.provider_models),
+            ("POST", "/api/backups/export", self.export_backup),
+            ("GET", "/api/backups/{token}", self.download_backup),
+            ("POST", "/api/backups/inspect", self.inspect_backup),
+            ("POST", "/api/backups/restore", self.restore_backup),
+            ("GET", "/api/diagnostics", self.diagnostics),
             ("GET", "/api/updates", self.update_status),
             ("POST", "/api/updates/check", self.check_updates),
             ("PUT", "/api/updates/preferences", self.update_preferences_native),
@@ -68,6 +84,20 @@ class ApiController:
 
     def health(self, request: Request) -> Response:
         return Response.json({"app": APP_ID, "version": __version__})
+
+    def analysis_status(self, request: Request) -> Response:
+        return Response.json(self.app.analysis.status(request.params["doc_id"]))
+
+    def start_analysis(self, request: Request) -> Response:
+        return Response.json(self.app.analysis.ensure(request.params["doc_id"], request.json().get("retry") is True))
+
+    def initialize_ai(self, request: Request) -> Response:
+        return Response.json(self.app.settings.initialize_ai())
+
+    def activity(self, request: Request) -> Response:
+        language = self.app.settings.load().target_language
+        return Response.json({'translations': self.app.jobs.summaries(language),
+                              'analysis': [self.app.analysis.summary(doc.id) for doc in self.app.library.list()]})
 
     def update_status(self, request: Request) -> Response:
         return Response.json(self.app.updates.view(request.lang))
@@ -232,6 +262,19 @@ class ApiController:
         if task in (AssistTask.TRANSLATE_BLOCKS, AssistTask.REFERENCE):
             raise InvalidInput(_("이 작업은 전용 주소를 쓰세요."))
         settings = self.app.settings.load()
+        model = data.get("model")
+        provider = None
+        if model is not None:
+            if not isinstance(model, str) or len(model) > 200:
+                raise InvalidInput(_("모델 이름을 확인해 주세요."))
+            if model.strip():
+                provider = self.app.settings.active_provider(settings)
+                if provider is not None:
+                    if not any(option.key == "model" for option in provider.options):
+                        raise InvalidInput(_("이 연결은 모델 선택을 지원하지 않아요."))
+                    values = settings.options_for(settings.provider)
+                    values['model'] = model.strip()
+                    provider = self.app.settings.provider(settings.provider, values=values)
         completion = self.app.assistant.run(AssistRequest(
             task=task,
             text=str(data.get("text", "")),
@@ -240,7 +283,7 @@ class ApiController:
             target_language=settings.target_language,
             title=str(data.get("title", ""))[:300],
             images=self._images(data.get("images")),
-        ), cache_only=bool(data.get("cache_only")))
+        ), cache_only=bool(data.get("cache_only")), provider=provider)
         return Response.json(completion.to_dict() if completion else None)
 
     def annotations(self, request: Request) -> Response:
@@ -272,6 +315,15 @@ class ApiController:
         return Response.json(self.app.translations.translate(request.params["doc_id"], blocks, title=str(data.get("title", ""))[:300],
                                                              section=str(data.get("section", ""))[:200], terms=str(data.get("terms", ""))[:600]))
 
+    def translation_jobs(self, request: Request) -> Response:
+        return Response.json({"jobs": self.app.jobs.list(request.params['doc_id'])})
+
+    def create_translation_job(self, request: Request) -> Response:
+        return Response.json({"job": self.app.jobs.create(request.params['doc_id'], request.json())}, 202)
+
+    def translation_job_action(self, request: Request) -> Response:
+        return Response.json({"job": self.app.jobs.action(request.params['job_id'], request.params['action'])})
+
     def explain_reference(self, request: Request) -> Response:
         data = request.json()
         return Response.json(self.app.reference_notes.explain(str(data.get("citation", "")), language=self.app.settings.load().target_language,
@@ -297,7 +349,7 @@ class ApiController:
     def update_settings(self, request: Request) -> Response:
         data = request.json()
         self.app.settings.update_general(provider=data.get("provider"), target_language=data.get("target_language"),
-                                         ui_language=data.get("ui_language"))
+                                         ui_language=data.get("ui_language"), auto_translate=data.get("auto_translate"))
         return Response.json(self._settings_view(request))
 
     def update_provider(self, request: Request) -> Response:
@@ -312,3 +364,40 @@ class ApiController:
         if not result.get("ok"):
             result["message"] = translate(result["message"], request.lang)
         return Response.json(result)
+
+    def provider_models(self, request: Request) -> Response:
+        return Response.json(self.app.settings.available_models(request.params['provider_id']))
+
+    def discover_provider(self, request: Request) -> Response:
+        return Response.json(self.app.settings.discover_provider(request.params['provider_id']))
+
+    def export_backup(self, request: Request) -> Response:
+        path = self.app.archives.export()
+        return Response.json({'url': '/api/backups/'+path.stem})
+
+    def download_backup(self, request: Request) -> Response:
+        token = request.params['token']
+        if not re.fullmatch('[a-f0-9]{32}', token):
+            raise NotFound(_("없는 파일이에요."))
+        path = self.app.paths.root/'backups/exports'/(token+'.paperdesk')
+        if not path.is_file():
+            raise NotFound(_("없는 파일이에요."))
+        return Response.send_file(path, 'application/zip', {'Content-Disposition': 'attachment; filename="Paperdesk-backup.paperdesk"'})
+
+    def inspect_backup(self, request: Request) -> Response:
+        with tempfile.TemporaryDirectory(prefix='paperdesk-inspect-') as folder:
+            path = Path(folder)/'backup.paperdesk'
+            path.write_bytes(request.body)
+            return Response.json(self.app.archives.prepare(path))
+
+    def restore_backup(self, request: Request) -> Response:
+        if any(job['state'] in ('queued','running') for job in self.app.jobs.repository.list()):
+            raise InvalidInput(_("진행 중인 번역을 멈춘 뒤 복원해 주세요."))
+        return Response.json(self.app.archives.schedule(str(request.json().get('token', ''))))
+
+    def diagnostics(self, request: Request) -> Response:
+        from ..services.diagnostics import diagnostic_report
+        response = Response.json(diagnostic_report(self.app.paths))
+        response.headers['Content-Disposition'] = 'attachment; filename="Paperdesk-diagnostics.json"'
+        response.headers['Cache-Control'] = 'no-store'
+        return response

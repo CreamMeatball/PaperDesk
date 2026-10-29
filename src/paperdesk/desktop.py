@@ -7,6 +7,7 @@ import webbrowser
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import ClassVar
+from urllib.parse import urljoin
 
 from . import APP_NAME
 from .platforms import Platform
@@ -23,6 +24,17 @@ class DesktopShell(ABC):
 
     @abstractmethod
     def run(self, url: str) -> None: ...
+
+
+def _macos_settings_shortcut() -> None:
+    from AppKit import NSApplication, NSEventModifierFlagCommand
+
+    menu = NSApplication.sharedApplication().mainMenu().itemAtIndex_(0).submenu()
+    for item in menu.itemArray():
+        if item.title() == "Settings…":
+            item.setKeyEquivalent_(",")
+            item.setKeyEquivalentModifierMask_(NSEventModifierFlagCommand)
+            break
 
 
 class NativeWindowShell(DesktopShell):
@@ -42,6 +54,7 @@ class NativeWindowShell(DesktopShell):
 
     def run(self, url: str) -> None:
         import webview  # optional dependency, imported only when a window is requested
+        webview.settings['ALLOW_DOWNLOADS'] = True
 
         updater = None
         if self.platform.name == "macos" and self.updates is not None:
@@ -50,16 +63,30 @@ class NativeWindowShell(DesktopShell):
             self.updates.attach(updater)
 
         self.storage.mkdir(parents=True, exist_ok=True)
-        webview.create_window(
+        window = webview.create_window(
             APP_NAME,
             url + ("&" if "?" in url else "?") + "shell=native",
             width=1360,
             height=880,
             min_size=(960, 620),
+            frameless=False,
+            resizable=True,
             text_select=True,  # pywebview disables selection by default; readers need it
             **self.platform.window_options(),
         )
-        webview.start(func=updater.start if updater else None, private_mode=False, storage_path=str(self.storage))
+        menu = []
+        if self.platform.name == "macos":
+            from webview.menu import Menu, MenuAction
+            menu = [Menu("__app__", [MenuAction("Settings…", lambda: window.load_url(urljoin(url, "/settings?shell=native")))])]
+
+        def started():
+            if self.platform.name == "macos":
+                from PyObjCTools.AppHelper import callAfter
+                callAfter(_macos_settings_shortcut)
+            if updater:
+                updater.start()
+
+        webview.start(func=started, menu=menu, private_mode=False, storage_path=str(self.storage))
 
 
 class BrowserShell(DesktopShell):

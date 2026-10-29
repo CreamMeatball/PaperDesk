@@ -4,10 +4,9 @@ import { renderInlineMath } from "./markdown.js";
 import { drawRects, rectContains } from "./textmap.js";
 import { t } from "./i18n.js";
 
-var BATCH_BLOCKS = 10, BATCH_CHARS = 5000;
 var MODES = [["side", "나란히"], ["over", "원문 위에"], ["off", "번역 숨기기"]];
 // Cross-reference words in every UI/answer language we ship (ko, en, ja, zh).
-var XREF = /(그림|표|알고리즘|アルゴリズム|算法|図|图|表|Figures?|Figs?\.|Tables?|Tabs?\.|Algorithms?|Alg\.)\s*(\d+|[A-Z]\.\d+)|(수식|식|数式|公式|方程|式|Eqs?\.|Equations?)\s*[\(（]?(\d+)[\)）]?|\[(\d{1,4}(?:\s*[,–\-]\s*\d{1,4})*)\]/g;
+var XREF = /(그림|표|알고리즘|アルゴリズム|算法|図|图|表|Figures?|Figs?\.|Tables?|Tabs?\.|Algorithms?|Alg\.)\s*(\d+|[A-Z]\.\d+)|(수식|식|数式|公式|方程|式|Eqs?\.|Equations?)\s*(?:\\\(|\$)?\s*[\(（]?(\d+[a-z]?|[A-Z]\.\d+)[\)）]?\s*(?:\\\)|\$)?|\[(\d{1,4}(?:\s*[,–\-]\s*\d{1,4})*)\]/g;
 var XREF_TABLE = /^(표|表|Tab)/i, XREF_ALGORITHM = /^(알고리즘|アルゴリズム|算法|Alg)/i;
 
 // Body translation: cards beside (or over) the PDF, sentence-to-sentence linking, magnifier per paragraph,
@@ -18,8 +17,10 @@ export class TranslationController {
     this.app = reader.app;
     this.store = {};
     this.pending = new Set();
-    this.queue = [];
+    this.submitting = new Set();
+    this.requesting = new Set();
     this.running = false;
+    this.jobs = [];
     this.done = 0;
     this.total = 0;
     this.active = null;
@@ -27,20 +28,30 @@ export class TranslationController {
     this.label = h("span", null, t("번역"));
     this.button = h("button", { class: "btn tb-btn", title: t("본문 번역"), onclick: function (event) { self.openMenu(event.currentTarget); } },
       icon("translate"), this.label, icon("chevronDown", 12));
+    this.statusText = h("span");
+    this.statusAction = h("button", { class: "btn small", hidden: true, onclick: function () { self.reader.startAnalysis(true); } }, t("다시 분석"));
+    this.progress = h("progress", { "aria-label": t("본문 번역"), hidden: true });
+    this.status = h("div", { class: "translation-status", role: "status", "aria-live": "polite" }, this.statusText, this.progress, this.statusAction);
+    this.updateLabel();
     this.hover = h("div", { class: "block-hover" });
     this.hoverButton = h("button", { class: "block-btn", onmousedown: function (event) { event.preventDefault(); }, onclick: function (event) {
       event.stopPropagation();
       self.onHoverButton();
     } });
     this.hover.append(this.hoverButton);
+    this.hoverButton.addEventListener("mouseenter", function () {
+      cancelAnimationFrame(self.frame); self.frame = 0; clearTimeout(self.hideTimer); self.hideTimer = null;
+    });
+    this.hoverButton.addEventListener("mouseleave", function () { self.scheduleHideHover(); });
     this.onMove = this.onMove.bind(this);
     reader.pagesEl.addEventListener("mousemove", this.onMove);
-    reader.pagesEl.addEventListener("mouseleave", function () { self.clearSentence(); self.scheduleHideHover(); });
+    reader.pagesEl.addEventListener("mouseleave", function () { cancelAnimationFrame(self.frame); self.frame = 0; self.clearSentence(); self.scheduleHideHover(); });
     reader.pagesEl.addEventListener("mouseover", function (event) { self.onCardOver(event); });
     reader.pagesEl.addEventListener("mouseout", function (event) { self.onCardOut(event); });
+    reader.pagesEl.addEventListener("wheel", function (event) { self.onCardWheel(event); }, { passive: false });
   }
 
-  destroy() { this.queue = []; this.hover.remove(); }
+  destroy() { clearTimeout(this.pollTimer); clearTimeout(this.hideTimer); cancelAnimationFrame(this.frame); this.clearSentence(); this.hover.remove(); }
 
   get analysis() { return this.reader.analysis; }
 
@@ -49,11 +60,18 @@ export class TranslationController {
       var data = await this.app.api.get("/api/documents/" + this.reader.id + "/translations");
       this.language = data.language;
       this.store = data.blocks || {};
-    } catch (error) { console.warn(error); }
-    this.updateLabel();
+    } catch (error) { this.loadFailed = true; this.updateLabel(); console.warn(error); return; }
+    if (!await this.pollJobs()) return;
     var reader = this.reader, self = this;
     reader.pages.forEach(function (state) { if (state.rendered) self.renderPage(state); });
     reader.nav.refreshSections();
+    var provider = this.app.settings.active();
+    if (!this.autoStarted && reader.alive && this.app.settings.data.auto_translate && reader.tmode !== "off" && provider && provider.available &&
+        !this.jobs.some(function (job) { return job.language === self.language && job.state !== "completed"; })) {
+      this.autoStarted = true;
+      var fresh = this.analysis.blocks.filter(function (b) { return b.translatable && !self.store[b.key] && !self.pending.has(b.key); });
+      if (fresh.length) await this.enqueue(fresh);
+    }
   }
 
   blocksOn(page) {
@@ -87,18 +105,57 @@ export class TranslationController {
       items.push({ label: t("목차에서 골라 번역…"), icon: "list", onClick: function () { reader.nav.open("sections"); } });
       items.push({ label: all.length ? t("남은 본문 전체 번역 ({n}문단)", { n: all.length }) : t("전체 번역 완료"), icon: "translate",
         onClick: function () { if (all.length) self.translateAll(all); } });
-      if (this.running) items.push({ label: t("번역 멈추기"), icon: "close", onClick: function () { self.queue = []; toast(t("남은 번역을 취소했어요")); } });
+      if (this.running) items.push({ label: t("번역 멈추기"), icon: "close", onClick: function () { self.cancelJobs(); } });
+      this.jobs.filter(function (job) { return job.state === "paused" || job.state === "failed"; }).forEach(function (job) {
+        items.push({ label: t("중단된 번역 재개 ({done}/{total})", { done: job.completed, total: job.total }), onClick: function () { self.resumeJob(job); } });
+        items.push({ label: t("중단 작업 취소"), onClick: async function () {
+          await self.app.api.post("/api/translation-jobs/" + job.id + "/cancel"); await self.pollJobs();
+        } });
+      });
+      if (this.jobs.some(function (job) { return job.language === self.language && (job.state === "failed" || job.state === "paused" || job.state === "cancelled"); })) {
+        items.push({ label: t("새 분석으로 남은 본문 번역…"), icon: "translate", onClick: function () { self.translateAll(all); } });
+      }
+      items.push({ label: t("현재 쪽 다시 번역…"), onClick: function () { self.retranslatePage(); } });
     }
     menuAt(anchor, items);
   }
 
   updateLabel() {
-    if (this.running || this.queue.length) this.label.textContent = t("번역 {done}/{total}", { done: this.done, total: this.total });
+    var starting = this.submitting.size > 0, count = this.analysis ? this.analysis.blocks.filter((b) => b.translatable && this.store[b.key]).length : 0;
+    if (starting) this.label.textContent = t("번역 준비 중…");
+    else if (this.running) this.label.textContent = t("번역 중 {done}/{total}", { done: this.done, total: this.total });
     else {
-      var count = Object.keys(this.store).length;
       this.label.textContent = count ? t("번역 {n}", { n: count }) : t("번역");
     }
-    this.button.classList.toggle("busy", this.running);
+    var busy = starting || this.running, text;
+    if (this.reader.analysisError) { text = t("문서 분석을 완료하지 못했어요. 원문은 계속 읽을 수 있어요."); busy = false; }
+    else if (this.reader.analysisPhase === "preparing") { text = t("문서 분석 모델을 준비하는 중… 처음에는 다운로드가 필요해요."); busy = true; }
+    else if (this.reader.analysisPhase) { text = t("Docling으로 문단과 수식을 분석하는 중…"); busy = true; }
+    else if (this.loadFailed) text = t("번역을 불러오지 못했어요. 문서를 다시 열어 주세요.");
+    else if (this.pollFailed) text = t("번역 상태를 확인하지 못했어요. 다시 확인하는 중…");
+    else if (!this.analysis) { text = t("문서를 분석하는 중이에요…"); busy = true; }
+    else if (starting) text = t("번역 준비 중…");
+    else if (this.running) {
+      text = t("번역 중 {done}/{total}", { done: this.done, total: this.total });
+      if (!this.done) text += " · " + t("AI 응답을 기다리는 중…");
+    } else {
+      var latest = this.jobs.filter(function (job) { return job.language === this.language; }, this).slice(-1)[0];
+      if (latest && latest.state === "failed" && latest.missing_keys && latest.missing_keys.length) text = t("응답에서 {n}문단이 빠져 번역이 중단됐어요. 번역 메뉴에서 다시 시작해 주세요.", { n: latest.missing_keys.length });
+      else if (latest && (latest.state === "failed" || latest.state === "paused")) text = t("중단된 번역이 있어요. 번역 메뉴에서 재개할 수 있어요.");
+      else if (latest && latest.state === "cancelled") text = t("번역이 취소됐어요.");
+      else if (count) text = t("번역 완료 {n}문단", { n: count });
+      else if (!this.app.settings.data.auto_translate) text = t("자동 번역 꺼짐");
+      else if (!this.app.settings.data.provider) text = t("AI가 연결되지 않았어요. 설정에서 사용할 AI를 고르세요.");
+      else text = t("번역할 본문이 없어요.");
+    }
+    this.button.classList.toggle("busy", busy);
+    this.status.classList.toggle("busy", busy);
+    if (this.statusAction) this.statusAction.hidden = !this.reader.analysisError;
+    this.status.hidden = this.reader.tmode === "off" && !busy && !this.pollFailed && !this.reader.analysisError;
+    if (this.statusText.textContent !== text) this.statusText.textContent = text;
+    this.progress.hidden = !this.running || starting || this.pollFailed;
+    this.progress.max = this.total || 1;
+    this.progress.value = this.done;
   }
 
   // ---------- queue ----------
@@ -120,55 +177,93 @@ export class TranslationController {
     if (ok) this.enqueue(blocks);
   }
 
-  enqueue(blocks) {
-    var self = this;
+  async enqueue(blocks, force) {
     if (this.reader.tmode === "off") this.reader.setTranslationMode("side");
-    var fresh = blocks.filter(function (b) { return !self.store[b.key] && !self.pending.has(b.key); });
+    var self = this;
+    var fresh = blocks.filter(function (b) { return (force || !self.store[b.key]) && !self.pending.has(b.key); });
     if (!fresh.length) { toast(t("이미 번역했어요.")); return; }
-    fresh.forEach(function (b) { self.pending.add(b.key); });
-    var batch = [], size = 0;
-    fresh.forEach(function (b) {
-      if (batch.length && (batch.length >= BATCH_BLOCKS || size + b.text.length > BATCH_CHARS || batch[0].sectionId !== b.sectionId)) {
-        self.queue.push(batch); batch = []; size = 0;
-      }
-      batch.push(b); size += b.text.length;
-    });
-    if (batch.length) this.queue.push(batch);
-    this.total += fresh.length;
-    this.refreshPages(fresh);
+    fresh.forEach(function (b) { self.submitting.add(b.key); self.pending.add(b.key); });
     this.updateLabel();
-    this.run();
+    this.refreshPages(fresh);
+    try {
+      await this.app.api.post("/api/documents/" + this.reader.id + "/translation-jobs", {
+        blocks: fresh.map(function (b) { return { key: b.key, sentences: b.sentences }; }),
+        title: this.reader.title(), terms: this.app.assistant.keyTerms(), force: !!force
+      });
+    } catch (error) { toast(error.message, true); }
+    finally { fresh.forEach(function (b) { self.submitting.delete(b.key); }); }
+    await this.pollJobs();
   }
 
-  async run() {
-    if (this.running) return;
-    this.running = true;
-    this.updateLabel();
-    while (this.queue.length && this.reader.alive) {
-      var batch = this.queue.shift(), self = this;
-      var section = this.analysis.sections.find(function (s) { return s.id === batch[0].sectionId; });
-      try {
-        var result = await this.app.api.post("/api/documents/" + this.reader.id + "/translations", {
-          blocks: batch.map(function (b) { return { key: b.key, sentences: b.sentences }; }),
-          title: this.reader.title(), section: section ? section.title : "", terms: this.app.assistant.keyTerms()
-        });
-        Object.assign(this.store, result.blocks);
-        if (result.missing && result.missing.length) toast(t("{n}문단은 번역 결과를 받지 못했어요. 다시 시도해 주세요.", { n: result.missing.length }), true);
-      } catch (error) {
-        toast(error.message, true);
-        if (error.code === "provider_unavailable") { this.queue.forEach(function (b) { b.forEach(function (x) { self.pending.delete(x.key); }); }); this.queue = []; }
-      }
-      batch.forEach(function (b) { self.pending.delete(b.key); });
-      this.done += batch.length;
-      this.refreshPages(batch);
+  async pollJobs() {
+    clearTimeout(this.pollTimer);
+    if (!this.reader.alive) return;
+    try {
+      var data = await this.app.api.get("/api/documents/" + this.reader.id + "/translation-jobs");
+      this.jobs = data.jobs;
+      var active = this.jobs.filter(function (j) { return j.language === this.language && (j.state === "queued" || j.state === "running"); }, this);
+      this.running = active.length > 0;
+      this.done = active.reduce(function (n, j) { return n + j.completed; }, 0);
+      this.total = active.reduce(function (n, j) { return n + j.total; }, 0);
+      var saved = await this.app.api.get("/api/documents/" + this.reader.id + "/translations");
+      if (!this.reader.alive) return;
+      this.store = saved.blocks;
+      this.pending = new Set(this.submitting);
+      this.requesting = new Set();
+      this.jobs.filter(function (job) { return job.language === this.language; }, this).forEach(function (job) {
+        (job.active_keys || []).forEach(function (key) { this.requesting.add(key); }, this);
+      }, this);
+      active.forEach(function (job) { (job.pending_keys || []).forEach(function (key) { if (!this.store[key]) this.pending.add(key); }, this); }, this);
+      this.pollFailed = false;
       this.updateLabel();
+      var self = this;
+      this.reader.pages.forEach(function (page) { if (page.rendered) self.renderPage(page); });
       this.reader.nav.refreshSections();
+      if (!this.recoveryNotice && this.jobs.some(function (j) { return j.state === "paused" || j.state === "failed"; })) {
+        this.recoveryNotice = true;
+        toast(t("중단된 번역이 있어요. 번역 메뉴에서 재개할 수 있어요."));
+        var failed = this.jobs.find(function (j) { return j.state === "failed"; });
+        if (failed) toast(failed.error === "rate_limited" ? t("AI 사용 한도에 도달했어요. 해당 AI에서 한도를 확인한 뒤 다시 시도해 주세요.") :
+          failed.error === "auth_required" ? t("AI 로그인이 만료되었거나 필요해요. 해당 CLI에서 다시 로그인한 뒤 연결 시험을 해 주세요.") :
+          failed.error === "unsupported_model" ? t("선택한 모델을 사용할 수 없어요. 설치·모델 확인에서 지원 모델을 고르고 연결 시험을 해 주세요.") :
+          t("일부 문단의 번역을 받지 못했어요. 다시 시도해 주세요."), true);
+      }
+    } catch (error) {
+      this.pollFailed = true; this.updateLabel(); console.warn(error);
+      if (this.reader.alive) this.pollTimer = setTimeout(() => this.pollJobs(), 1200);
+      return false;
     }
-    this.running = false;
-    this.done = 0;
-    this.total = 0;
-    this.queue.forEach(function (batch) { batch.forEach(function (b) { this.pending.delete(b.key); }, this); }, this);
-    this.updateLabel();
+    if (this.reader.alive && (this.running || this.jobs.some(function (j) { return j.request_in_flight; }))) {
+      var self = this;
+      this.pollTimer = setTimeout(function () { self.pollJobs(); }, 1200);
+    }
+    return true;
+  }
+
+  async cancelJobs() {
+    try {
+      for (var job of this.jobs.filter(function (j) { return j.state === "queued" || j.state === "running"; })) {
+        await this.app.api.post("/api/translation-jobs/" + job.id + "/cancel");
+      }
+      toast(t("남은 번역을 취소했어요. 이미 보낸 요청은 완료·저장될 수 있어요."));
+      await this.pollJobs();
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async resumeJob(job) {
+    var ok = await confirmDialog({ title: t("번역을 재개할까요?"), confirm: t("재개"),
+      message: t("중단 직전에 전송한 요청은 사용량에 이미 반영되었을 수 있어요. 같은 AI·모델·언어로 남은 문단을 다시 요청해요.") });
+    if (!ok) return;
+    try {
+      await this.app.api.post("/api/translation-jobs/" + job.id + "/resume");
+      await this.pollJobs();
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async retranslatePage() {
+    var ok = await confirmDialog({ title: t("현재 쪽을 다시 번역할까요?"), confirm: t("다시 번역"),
+      message: t("현재 선택한 AI로 새 번역을 요청해요. 사용량이 발생하며 완료한 문단의 기존 번역을 바꿔요.") });
+    if (ok) this.enqueue(this.blocksOn(this.reader.current), true);
   }
 
   refreshPages(blocks) {
@@ -182,27 +277,33 @@ export class TranslationController {
   renderPage(state) {
     var mode = this.reader.tmode, self = this;
     var over = state.el.querySelector(".layer.over");
-    state.tcol.replaceChildren();
-    over.replaceChildren();
-    if (mode === "off" || !this.analysis) return;
+    var scrollTop = state.tcol.scrollTop;
+    var selection = window.getSelection();
+    if (selection && !selection.isCollapsed && (state.tcol.contains(selection.anchorNode) || over.contains(selection.anchorNode))) {
+      state.translationDeferred = true; return;
+    }
+    state.translationDeferred = false;
+    state.el.querySelectorAll(".translation-request").forEach(function (n) { n.remove(); });
+    var requesting = this.requesting || new Set();
+    this.partsOn(state.number).forEach(function (part) {
+      if (requesting.has(part.block.key)) drawRects(state.el.querySelector(".layer.flash"), [part.rect], "translation-request");
+    });
+    if (mode === "off" || !this.analysis) { state.tcol.replaceChildren(); over.replaceChildren(); return; }
     var blocks = this.blocksOn(state.number).filter(function (b) { return self.store[b.key] || self.pending.has(b.key); });
     var height = state.el.offsetHeight, width = state.el.offsetWidth;
     if (mode === "side") {
-      var placed = blocks.slice().sort(function (a, b) { return a.rect[1] - b.rect[1] || a.rect[0] - b.rect[0]; }), bottom = 0;
-      placed.forEach(function (block) {
-        var card = self.card(block);
-        state.tcol.append(card);
-        var top = Math.max(block.rect[1] * height, bottom + 6);
-        card.style.top = top + "px";
-        bottom = top + card.offsetHeight;
-      });
-      state.tcol.style.minHeight = Math.max(height, bottom + 12) + "px";
+      over.replaceChildren();
+      var placed = blocks;
+      this.syncCards(state.tcol, placed);
+      this.placeCards(state, placed);
+      state.tcol.scrollTop = scrollTop;
     } else {
+      state.tcol.replaceChildren();
+      this.syncCards(over, blocks);
       blocks.forEach(function (block) {
-        var card = self.card(block), r = block.rect;
+        var card = Array.from(over.children).find(function (c) { return c.dataset.key === block.key; }), r = block.rect;
         card.classList.add("over");
         card.style.cssText = "left:" + r[0] * width + "px;top:" + r[1] * height + "px;width:" + (r[2] - r[0]) * width + "px;height:" + Math.max(14, (r[3] - r[1]) * height) + "px";
-        over.append(card);
         var size = Math.max(8, block.size * self.reader.scale * 0.92);
         card.style.fontSize = size + "px";
         for (var i = 0; i < 10 && card.scrollHeight > card.clientHeight + 1 && size > 6; i++) {
@@ -213,11 +314,39 @@ export class TranslationController {
     }
   }
 
+  // Polling must leave unchanged nodes in place: selection, hover and preview anchors live on them.
+  syncCards(container, blocks) {
+    var previous = new Map(Array.from(container.children).map(function (card) { return [card.dataset.key, card]; })), self = this;
+    blocks.forEach(function (block, index) {
+      var entry = JSON.stringify([self.store[block.key] || null, !self.store[block.key] && !!(self.requesting && self.requesting.has(block.key))]), card = previous.get(block.key);
+      if (!card || card.entry !== entry) { if (card) card.remove(); card = self.card(block); card.entry = entry; }
+      previous.delete(block.key);
+      if (container.children[index] !== card) container.insertBefore(card, container.children[index] || null);
+    });
+    previous.forEach(function (card) { card.remove(); });
+  }
+
+  placeCards(state, blocks) {
+    if (!this.reader.alive || this.reader.tmode !== "side") return;
+    // Cards stack in reading order; aligning them to the source paragraph only left empty gaps.
+    var bottom = 0, height = state.el.offsetHeight;
+    blocks.forEach(function (block, i) {
+      var card = state.tcol.children[i];
+      if (!card || card.dataset.key !== block.key) return;
+      var top = i ? bottom + 6 : 0;
+      card.style.top = top + "px";
+      bottom = top + card.offsetHeight;
+    });
+    state.tcol.style.height = height + "px";
+  }
+
   card(block) {
     var entry = this.store[block.key], self = this;
     var card = h("div", { class: "tcard kind-" + block.kind, "data-key": block.key });
     if (!entry) {
-      card.append(h("div", { class: "pending" }, h("span", { class: "typing" }, h("i"), h("i"), h("i")), t(" 번역 중")));
+      var requesting = this.requesting && this.requesting.has(block.key);
+      card.append(h("div", { class: "pending" }, requesting ? h("span", { class: "typing" }, h("i"), h("i"), h("i")) : icon("clock", 13),
+        requesting ? t("번역 중") : t("번역 대기 중")));
       return card;
     }
     var body = h("div", { class: "ttext" });
@@ -226,6 +355,7 @@ export class TranslationController {
         body.append(self.linkify(h("span", { class: "tsent", "data-s": String(index) }), sentence), " ");
       });
     } else {
+      card.append(h("small", { class: "sub" }, t("문장 대응이 맞지 않아 문단 단위로 표시해요.")));
       body.append(this.linkify(h("span", { class: "tsent whole", "data-s": "all" }), entry.text));
     }
     card.append(body);
@@ -234,8 +364,7 @@ export class TranslationController {
 
   // Wrap figure/table/equation/citation mentions so hovering them opens the same previews as in the PDF.
   linkify(span, text) {
-    var self = this;
-    span.append(renderInlineMath(text, function (part) { return self.linkText(part); }));
+    span.append(this.linkText(text));
     return span;
   }
 
@@ -243,15 +372,15 @@ export class TranslationController {
     var span = document.createDocumentFragment(), last = 0, match;
     XREF.lastIndex = 0;
     while ((match = XREF.exec(text))) {
-      span.append(text.slice(last, match.index));
-      var ref = h("span", { class: "xref" }, match[0]);
+      span.append(renderInlineMath(text.slice(last, match.index), function (part) { return document.createTextNode(part); }));
+      var ref = h("span", { class: "xref" }, renderInlineMath(match[0], function (part) { return document.createTextNode(part); }));
       if (match[1]) { ref.dataset.kind = XREF_TABLE.test(match[1]) ? "table" : XREF_ALGORITHM.test(match[1]) ? "algorithm" : "figure"; ref.dataset.label = match[2]; }
       else if (match[3]) { ref.dataset.kind = "equation"; ref.dataset.label = match[4]; }
       else { ref.dataset.kind = "cite"; ref.dataset.label = match[5]; }
       span.append(ref);
       last = match.index + match[0].length;
     }
-    span.append(text.slice(last));
+    span.append(renderInlineMath(text.slice(last), function (part) { return document.createTextNode(part); }));
     return span;
   }
 
@@ -267,7 +396,7 @@ export class TranslationController {
     return [start, start + compact(block.sentences[index]).length];
   }
 
-  showSentence(block, index) {
+  showSentence(block, index, fromCard) {
     this.clearSentence();
     var range = this.sentenceRange(block, index), reader = this.reader, rects = [];
     var pages = new Set(block.parts.map(function (p) { return p.page; }));
@@ -281,6 +410,18 @@ export class TranslationController {
     this.activeSpans = Array.prototype.slice.call(this.reader.pagesEl.querySelectorAll(selector));
     this.activeSpans.forEach(function (s) { s.classList.add("active"); });
     this.active = block.key + "#" + index;
+    this.activeFromCard = !!fromCard;
+    if (!fromCard && this.activeSpans.length) this.revealTranslation(this.activeSpans[0]);
+  }
+
+  revealTranslation(span) {
+    var column = span.closest(".tcol");
+    if (!column) return;
+    var box = column.getBoundingClientRect(), viewport = this.reader.pagesEl.getBoundingClientRect();
+    var top = Math.max(box.top, viewport.top), bottom = Math.min(box.bottom, viewport.bottom);
+    var rects = Array.from(span.getClientRects());
+    if (bottom <= top || !rects.length || rects.some(function (r) { return r.bottom > top + 8 && r.top < bottom - 8; })) return;
+    column.scrollBy({ top: rects[0].top - top - (bottom - top) / 3, behavior: "smooth" });
   }
 
   clearSentence() {
@@ -291,12 +432,24 @@ export class TranslationController {
     this.active = null;
   }
 
+  onCardWheel(event) {
+    if (event.defaultPrevented || event.ctrlKey || !event.deltaY || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+    var column = event.target.closest && event.target.closest(".tcol");
+    if (!column) return;
+    var end = Math.max(0, column.scrollHeight - column.clientHeight);
+    if ((event.deltaY < 0 && column.scrollTop <= 1) || (event.deltaY > 0 && column.scrollTop >= end - 1)) {
+      var delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? column.clientHeight : 1);
+      event.preventDefault();
+      this.reader.pagesEl.scrollBy(0, delta);
+    }
+  }
+
   onCardOver(event) {
     var span = event.target.closest && event.target.closest(".tsent");
     if (span && !event.target.closest(".xref")) {
       var card = span.closest(".tcard"), block = this.blockFor(card.dataset.key);
       var index = span.dataset.s === "all" ? "all" : Number(span.dataset.s);
-      if (block && this.active !== block.key + "#" + index) this.showSentence(block, index);
+      if (block && this.active !== block.key + "#" + index) this.showSentence(block, index, true);
     }
     var ref = event.target.closest && event.target.closest(".xref");
     if (ref) this.reader.citations.showForElement(ref, this.resolveRef(ref));
@@ -306,7 +459,8 @@ export class TranslationController {
     var ref = event.target.closest && event.target.closest(".xref");
     if (ref && !(event.relatedTarget && ref.contains(event.relatedTarget))) this.reader.citations.scheduleHide();
     var span = event.target.closest && event.target.closest(".tsent");
-    if (span && !(event.relatedTarget && span.contains(event.relatedTarget))) this.clearSentence();
+    var card = span && span.closest(".tcard");
+    if (span && !(event.relatedTarget && card.contains(event.relatedTarget))) this.clearSentence();
   }
 
   resolveRef(ref) {
@@ -330,7 +484,9 @@ export class TranslationController {
     if (event.buttons || !this.analysis || this.reader.area.active) return;
     var pageEl = event.target.closest && event.target.closest(".page");
     if (!pageEl || event.target.closest(".layer.over, .block-hover")) {
-      if (!event.target.closest || !event.target.closest(".block-hover")) this.scheduleHideHover();
+      cancelAnimationFrame(this.frame); this.frame = 0;
+      if (event.target.closest && event.target.closest(".block-hover")) { clearTimeout(this.hideTimer); this.hideTimer = null; }
+      else this.scheduleHideHover();
       return;
     }
     var x = event.clientX, y = event.clientY, self = this;
@@ -345,27 +501,36 @@ export class TranslationController {
       if (hit) self.showHover(state, block, hit.rect); else self.scheduleHideHover();
       // sentence under the pointer, for translated blocks
       var index = state.map.hitTest(x, y);
-      if (index < 0 || !block || !self.store[block.key] || self.reader.tmode === "off") {
+      if (!block || !self.store[block.key] || self.reader.tmode === "off") {
         if (self.active && !self.activeFromCard) self.clearSentence();
         return;
       }
-      var offset = state.map.blockOffsetOf(block, index);
-      if (offset < 0) return;
+      var offset = index < 0 ? -1 : state.map.blockOffsetOf(block, index);
       var entry = self.store[block.key], which = "all";
       if (entry.sentences && entry.sentences.length === block.sentences.length) {
-        var start = 0;
-        for (var i = 0; i < block.sentences.length; i++) {
-          var len = compact(block.sentences[i]).length;
-          if (offset < start + len) { which = i; break; }
-          start += len;
-        }
+        which = self.sentenceAt(state, block, offset, px, py);
       }
       if (self.active !== block.key + "#" + which) self.showSentence(block, which);
     });
   }
 
+  sentenceAt(state, block, offset, x, y) {
+    var start = 0, best = Infinity, nearest = 0;
+    for (var i = 0; i < block.sentences.length; i++) {
+      var end = start + compact(block.sentences[i]).length;
+      if (offset >= start && offset < end) return i;
+      state.map.blockRects(block, start, end).forEach(function (r) {
+        var dx = Math.max(r[0] - x, 0, x - r[2]), dy = Math.max(r[1] - y, 0, y - r[3]), distance = dy * 4 + dx;
+        if (distance < best) { best = distance; nearest = i; }
+      });
+      start = end;
+    }
+    return best === Infinity ? "all" : nearest;
+  }
+
   showHover(state, block, rect) {
     clearTimeout(this.hideTimer);
+    this.hideTimer = null;
     var layer = state.el.querySelector(".layer.ui");
     if (this.hover.parentNode !== layer) layer.append(this.hover);
     var r = rect || block.rect;
@@ -373,7 +538,11 @@ export class TranslationController {
     this.hoverBlock = block;
     var translated = !!this.store[block.key], pending = this.pending.has(block.key);
     var heading = block.kind === "heading";
-    this.hoverButton.replaceChildren(pending ? "…" : translated ? icon("check", 13) : heading ? "文" : icon("search", 13));
+    var buttonState = pending ? "pending" : translated ? "translated" : heading ? "heading" : "paragraph";
+    if (this.hoverButtonState !== buttonState) {
+      this.hoverButton.replaceChildren(pending ? "…" : translated ? icon("check", 13) : heading ? "文" : icon("search", 13));
+      this.hoverButtonState = buttonState;
+    }
     this.hoverButton.title = pending ? t("번역 중") : translated ? t("번역 보기") : heading ? t("이 절 번역") : t("이 문단 번역");
     this.hoverButton.classList.toggle("done", translated);
     this.hoverButton.classList.toggle("section", heading && !translated);
@@ -381,9 +550,9 @@ export class TranslationController {
   }
 
   scheduleHideHover() {
-    clearTimeout(this.hideTimer);
+    if (this.hideTimer) return;
     var self = this;
-    this.hideTimer = setTimeout(function () { self.hover.classList.remove("show"); self.hoverBlock = null; }, 260);
+    this.hideTimer = setTimeout(function () { self.hideTimer = null; self.hover.classList.remove("show"); self.hoverBlock = null; }, 140);
   }
 
   onHoverButton() {

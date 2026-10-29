@@ -4,7 +4,7 @@
 AI는 이미 쓰고 있는 것을 연결합니다: Codex·Claude Code 로그인, OpenAI·Claude API 키, 내 컴퓨터의 Ollama, 회사·학교의 vLLM 서버.
 논문과 설정은 모두 내 컴퓨터에만 저장됩니다.
 
-> 작업용 이름입니다. 이름은 `src/paperdesk/__init__.py`의 `APP_NAME`/`APP_ID` 한 곳에서 바뀝니다.
+> 작업용 이름입니다. 화면 이름은 `src/paperdesk/__init__.py`의 `APP_NAME`에서 바꿉니다. 영구 저장·키체인·번들 식별자는 이름과 별도로 고정합니다.
 
 ## 로컬 실행과 저장
 
@@ -45,7 +45,8 @@ paperdesk            # 앱 창 열기
 ## 주요 기능
 
 - 주제별 폴더(하위 폴더 무제한), 끌어다 놓기로 정리·가져오기, 폴더를 지워도 논문은 상위 폴더로 이동
-- PDF 읽기: 글 선택 → 번역(T)·설명(E)·질문(Q), 논문 요약, 현재 쪽 번역, 본문 전체 검색
+- PDF 가져오기: 파일명 대신 메타데이터·첫 페이지의 논문 제목을 찾아 서재 이름으로 자동 적용합니다. 직접 바꾼 이름과 원본 파일은 유지합니다.
+- PDF 읽기: 연결한 AI로 미번역 본문 전체를 자동 번역(설정에서 켜기/끄기, 완료한 문단부터 표시), 글 선택 → 번역(T)·설명(E)·질문(Q), 논문 요약, 본문 전체 검색
 - 논문마다 따로 저장되는 AI 대화, 같은 요청은 로컬 캐시로 재사용
 - 시스템 연동·다크·라이트 테마, 회색 반투명 창(macOS 흐림 효과)
 - 화면 언어: 한국어·English·日本語·简体中文 (처음에는 시스템 언어를 따르고 설정에서 변경). 번역·답변 언어는 따로 고릅니다.
@@ -57,11 +58,12 @@ paperdesk            # 앱 창 열기
 | --- | --- | --- |
 | Codex CLI | 사용자가 직접 한 `codex login` | OpenAI가 안내하는 비대화형 실행(`codex exec`) |
 | Claude Code | 사용자가 직접 한 Claude Code 로그인 | 수정하지 않은 Claude Code에 사용자가 직접 로그인하는 것은 허용 |
-| ChatGPT 요금제 | Sign in with ChatGPT (구현 예정) | OpenAI의 오픈소스·로컬 앱용 프리뷰 |
 | OpenAI API / Claude API | 내 API 키 (키체인 보관) | 각 사 권장 방식 |
 | Ollama / vLLM·OpenAI 호환 서버 | 없음 또는 서버 키 | OpenAI 호환 Chat Completions |
 
 Paperdesk는 Codex·Claude 로그인 정보를 읽거나 저장하지 않습니다. 자세한 근거와 링크는 [docs/ai-integrations.md](docs/ai-integrations.md)에 있습니다.
+
+체험용 가짜 응답과 미완성 연결은 배포 앱에서 제공하지 않습니다. 테스트용 응답기는 `tests/fixtures.py`, 미출시 실험은 `experiments/`에만 보관하며 앱 패키지에는 포함하지 않습니다.
 
 ## 구조
 
@@ -90,7 +92,7 @@ flowchart LR
 PYTHONPATH=src python3 -m paperdesk serve      # 브라우저로 http://127.0.0.1:47615
 PYTHONPATH=src python3 -m paperdesk doctor     # 설치·AI 연결 점검
 PYTHONPATH=src python3 -m unittest discover -s tests -t .
-pip install -e '.[native]'                      # macOS 네이티브 창 개발
+pip install -e '.[native,analysis]'                      # macOS 네이티브 창 개발
 ```
 
 데이터 폴더는 `PAPERDESK_HOME`으로 바꿀 수 있습니다.
@@ -127,4 +129,18 @@ Mac 준비, 키 설정, 빌드·배포 명령과 검증 범위는 [docs/macos-up
 
 ## 라이선스
 
-공개 전에 라이선스를 정하세요. 의존성이 모두 허용형(Apache-2.0, BSD, MIT)이라 MIT나 Apache-2.0을 그대로 쓸 수 있습니다. 제3자 고지는 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)에 있습니다.
+프로젝트는 [Apache License 2.0](LICENSE)로 배포합니다. 제3자 소프트웨어에는 각각의 라이선스가 적용되며 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)와 앱에 포함된 라이선스 파일에서 확인할 수 있습니다.
+
+## 배포 준비와 운영
+
+현재 공개 배포 전 베타 단계입니다. 첫 배포 대상은 Apple Silicon·macOS 15 이상이며, 실제 최저 버전과 별도 깨끗한 Mac 검증은 릴리스 조건입니다. 자세한 지원 범위와 실패·복구 동작은 [지원 안내](docs/support.md), 전송 범위는 [개인정보 안내](docs/privacy.md), 배포 소유자 작업과 통과 기준은 [배포 준비](docs/release-readiness.md)에 정리했습니다.
+
+- AI 설정의 **설치·모델 확인**은 CLI 버전과 Codex 지원 모델을 확인합니다. 로그인 확인과 실제 연결 시험은 구분하며, 모델이나 유료 연결을 자동으로 바꾸지 않습니다.
+- 본문 번역은 DB 작업으로 보관합니다. 창을 이동해도 진행하며, 재시작 후 중단 작업은 번역 메뉴에서 확인하고 재개합니다. 이미 보낸 요청의 사용량은 취소할 수 없을 수 있습니다. 기존 번역을 바꾸려면 **현재 쪽 다시 번역**을 명시적으로 선택합니다.
+- 설정의 **백업·복원**은 PDF·메모·번역·대화·설정을 함께 다룹니다. 키와 로그인 정보는 제외합니다. 복원 확인 후 완전히 재시작하면 적용하며 이전 서재 전체는 별도 폴더에 보존합니다. 큰 백업은 `paperdesk backup export|inspect|restore`를 사용합니다.
+- 앱 표시 이름과 데이터·키체인 식별자를 분리했습니다. 이름을 바꿔도 기존 `~/Library/Application Support/Paperdesk`를 계속 사용합니다.
+- 배포 빌드는 `requirements/macos-build.lock`의 고정 버전을 검사하고 앱에 빌드 명세를 포함합니다. 공개 릴리스 생성에는 프로젝트 LICENSE와 해당 빌드의 완료된 수동 검증 기록이 필요합니다. 서명·공증·실제 업데이트를 검증하기 전에는 공개 배포 완료로 표시하지 않습니다.
+
+문서 구조 분석은 로컬 Docling 2.142.1을 사용하고 PDF.js는 원문 렌더링과 텍스트 선택을 담당합니다. macOS DMG에는 별도 분석용 Python 런타임이 포함되며, 처음 논문을 분석할 때 Heron 모델을 내려받습니다. PDF를 분석 서버로 보내지 않으며 모델 준비 이후에는 오프라인 분석이 가능합니다. 서재와 리더에서 분석·번역 진행 상태를 확인할 수 있습니다. 자동 번역은 기본으로 켜져 있고 설정에서 끌 수 있습니다.
+
+처음에는 로그인된 Codex/Claude CLI를 사용량 없이 확인해 연결과 모델을 선택합니다. Codex는 지원 목록 중 최신 Luna를 우선하고, 저장된 연결·모델은 유지합니다. 로그인된 연결이 없으면 설정에서 로그인 방법과 재확인 버튼을 보여 줍니다.

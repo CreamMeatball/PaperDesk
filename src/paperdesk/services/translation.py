@@ -72,35 +72,44 @@ class TranslationService:
             raise InvalidInput(_("한 번에 {n}문단까지 번역할 수 있어요.", n=MAX_BLOCKS))
         blocks, total = [], 0
         for item in raw:
+            if not isinstance(item, dict):
+                raise InvalidInput(_("문단 형식이 올바르지 않아요."))
             key = str((item or {}).get("key", ""))
             sentences = item.get("sentences") if isinstance(item, dict) else None
             if not _KEY.match(key) or not isinstance(sentences, list) or not sentences:
                 raise InvalidInput(_("문단 형식이 올바르지 않아요."))
             clean = tuple(" ".join(str(s).split()) for s in sentences if str(s).strip())[:200]
+            if not clean:
+                raise InvalidInput(_("문단 형식이 올바르지 않아요."))
             total += sum(len(s) for s in clean)
             blocks.append(BlockInput(key, clean))
         if total > MAX_BATCH_CHARS * 2:
             raise InvalidInput(_("한 번에 보내기에는 글이 너무 길어요."))
         return blocks
 
-    def translate(self, doc_id: str, blocks: list[BlockInput], *, title: str = "", section: str = "", terms: str = "") -> dict:
+    def translate(self, doc_id: str, blocks: list[BlockInput], *, title: str = "", section: str = "", terms: str = "",
+                  force: bool = False) -> dict:
         document = self._library.get(doc_id)
         language = self._language()
         saved = {t.block_key: t for t in self._repository.list(doc_id, language)}
-        todo = [b for b in blocks if not (b.key in saved and saved[b.key].source_hash == b.source_hash)]
+        todo = [b for b in blocks if force or not (b.key in saved and saved[b.key].source_hash == b.source_hash)]
         results = {b.key: saved[b.key] for b in blocks if b not in todo}
         if todo:
             payload = {"blocks": [{"id": str(i), "sentences": list(b.sentences)} for i, b in enumerate(todo)]}
             completion = self._assistant.run(AssistRequest(
                 AssistTask.TRANSLATE_BLOCKS, json.dumps(payload, ensure_ascii=False), question=terms[:600],
-                context=f"Section: {section}" if section else "", target_language=language, title=title or document.title))
+                context=f"Section: {section}" if section else "", target_language=language, title=title or document.title),
+                refresh=force)
             data = _extract_json(completion.text) or {}
-            by_id = {str(b.get("id")): b for b in data.get("blocks", []) if isinstance(b, dict)}
+            outputs = data.get('blocks', [])
+            by_id = {str(b.get("id")): b for b in outputs if isinstance(b, dict)} if isinstance(outputs, list) else {}
             for index, block in enumerate(todo):
                 got = by_id.get(str(index), {})
-                sentences = [" ".join(str(s).split()) for s in got.get("sentences", []) if isinstance(s, (str, int, float))]
-                if not sentences and len(todo) == 1 and not data:
-                    sentences = [completion.text.strip()]  # model ignored JSON: keep the paragraph unaligned
+                raw_sentences = got.get('sentences', [])
+                sentences = [" ".join(str(s).split()) for s in raw_sentences if isinstance(s, (str, int, float))] if isinstance(raw_sentences, list) else []
+                sentences = [s for s in sentences if s]
+                if not sentences and len(todo) == 1 and not data and not completion.text.lstrip().startswith(("{", "```")):
+                    sentences = [completion.text.strip()] if completion.text.strip() else []  # model ignored JSON: keep the paragraph unaligned
                 if not sentences:
                     continue
                 aligned = len(sentences) == len(block.sentences)

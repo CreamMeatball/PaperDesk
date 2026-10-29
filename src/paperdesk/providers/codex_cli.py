@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 
 from ..domain.models import Prompt
 from ..ports.ai import CommandResult, OptionField
-from .cli import CliProvider, binary_option
+from .cli import WINDOWS, CliProvider, binary_option
 from ..i18n import _
 
 
@@ -21,12 +22,19 @@ class CodexCliProvider(CliProvider):
     docs_url = "https://developers.openai.com/codex/noninteractive"
     executable = "codex"
     supports_images = True
-    extra_dirs = ("/Applications/Codex.app/Contents/Resources",)
+    # The Codex desktop app's own CLI; on Windows it lives in a per-version folder.
+    extra_dirs = (("%LOCALAPPDATA%/OpenAI/Codex/bin/*",) if WINDOWS else
+                  ("/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS",
+                   "/Applications/Codex.app/Contents/Resources"))
     login_args = ("login", "status")
     options = (
         OptionField("model", _("모델"), placeholder=_("비워 두면 Codex 기본 모델")),
         binary_option("codex"),
     )
+
+    def available_models(self) -> list[str]:
+        path = self.locate()
+        return self.context.runner.codex_models(path) if path else []
 
     def interpret_login(self, result: CommandResult) -> tuple[bool, str]:
         line = (result.stdout or result.stderr).strip().splitlines()[:1]
@@ -37,6 +45,11 @@ class CodexCliProvider(CliProvider):
     def build_command(self, path: str, prompt: Prompt, workdir: Path) -> list[str]:
         argv = [
             path, "exec",
+            "--ignore-user-config",
+            "--disable", "shell_tool",
+            "--disable", "unified_exec",
+            "--disable", "multi_agent",
+            "--disable", "shell_snapshot",
             "--skip-git-repo-check",
             "--ephemeral",
             "--sandbox", "read-only",
@@ -45,6 +58,10 @@ class CodexCliProvider(CliProvider):
         ]
         if self.model:
             argv += ["--model", self.model]
+        if prompt.response_schema:
+            schema = workdir / "response-schema.json"
+            schema.write_text(json.dumps(prompt.response_schema), encoding="utf-8")
+            argv += ["--output-schema", str(schema)]
         for number, image in enumerate(prompt.images, start=1):
             path_ = workdir / f"image-{number}.{'jpg' if image.media_type == 'image/jpeg' else 'png'}"
             path_.write_bytes(image.data)

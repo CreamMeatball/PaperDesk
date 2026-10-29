@@ -8,15 +8,14 @@ from __future__ import annotations
 
 import os
 import re
-import shutil
 import subprocess
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from . import APP_ID, APP_NAME
+from . import DATA_DIR_NAME, STORAGE_ID, KEYCHAIN_SERVICE
 from .config import environment_language, language_name
-from .infrastructure.secrets import FileSecretStore, KeychainSecretStore
+from .infrastructure.secrets import CredentialManagerSecretStore, FileSecretStore, KeychainSecretStore
 from .ports.secrets import SecretStore
 
 
@@ -47,10 +46,10 @@ class MacPlatform(Platform):
     supported = True
 
     def data_dir(self) -> Path:
-        return Path.home() / "Library" / "Application Support" / APP_NAME
+        return Path.home() / "Library" / "Application Support" / DATA_DIR_NAME
 
     def secret_store(self, data_dir: Path) -> SecretStore:
-        return KeychainSecretStore(APP_ID) if shutil.which("security") else FileSecretStore(data_dir / "secrets.json")
+        return KeychainSecretStore(KEYCHAIN_SERVICE)
 
     def window_options(self) -> dict:
         return {"vibrancy": True, "background_color": "#2c2c2e"}
@@ -76,15 +75,41 @@ class MacPlatform(Platform):
 
 
 class WindowsPlatform(Platform):
-    """Not supported yet. TODO: Credential Manager secret store, Mica backdrop, WebView2 runtime check."""
+    """Not supported yet. TODO: Mica backdrop, WebView2 runtime check."""
 
     name = "windows"
 
     def data_dir(self) -> Path:
-        return Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming") / APP_NAME
+        # Local, not Roaming: PDFs, caches and analysis models are large and must not sync with roaming profiles.
+        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / DATA_DIR_NAME
 
     def secret_store(self, data_dir: Path) -> SecretStore:
-        return FileSecretStore(data_dir / "secrets.json")
+        return CredentialManagerSecretStore(KEYCHAIN_SERVICE)
+
+    def preferred_language(self) -> str:
+        # The display languages chosen in Windows Settings. GUI launches have no LANG, and locale names look like 'Korean_Korea'.
+        for code in self.ui_languages():
+            name = language_name(code)
+            if name:
+                return name
+        return super().preferred_language()
+
+    @staticmethod
+    def ui_languages() -> list[str]:
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            get = ctypes.WinDLL("kernel32").GetUserPreferredUILanguages
+            count, size = wintypes.ULONG(), wintypes.ULONG(0)
+            if not get(0x8, ctypes.byref(count), None, ctypes.byref(size)):  # MUI_LANGUAGE_NAME: 'ko-KR'
+                return []
+            buffer = ctypes.create_unicode_buffer(size.value)
+            if not get(0x8, ctypes.byref(count), buffer, ctypes.byref(size)):
+                return []
+        except (OSError, AttributeError):
+            return []
+        return [code for code in buffer[:size.value].split("\0") if code]
 
 
 class LinuxPlatform(Platform):
@@ -93,7 +118,7 @@ class LinuxPlatform(Platform):
     name = "linux"
 
     def data_dir(self) -> Path:
-        return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / APP_ID
+        return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / STORAGE_ID
 
     def secret_store(self, data_dir: Path) -> SecretStore:
         return FileSecretStore(data_dir / "secrets.json")

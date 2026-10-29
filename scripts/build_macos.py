@@ -14,12 +14,27 @@ import plistlib
 import shutil
 import subprocess
 import sys
+import importlib.metadata
+import hashlib
+import sysconfig
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from paperdesk import APP_NAME, MAC_BUNDLE_ID, __version__
+from paperdesk import APP_NAME, MAC_BUNDLE_ID, MAC_MINIMUM_VERSION, __version__
 from paperdesk.infrastructure.macos_updates import valid_update_configuration
+
+
+def verify_production_modules(executable: Path) -> None:
+    """Reject accidental inclusion of development fixtures or unfinished integrations."""
+    from PyInstaller.archive.readers import CArchiveReader
+
+    archive = CArchiveReader(str(executable)).open_embedded_archive("PYZ.pyz")
+    blocked = {"paperdesk.providers.demo", "paperdesk.providers.chatgpt_plan"}
+    unexpected = sorted(name for name in archive.toc
+                        if name.split(".")[0] in {"tests", "experiments"} or name in blocked)
+    if unexpected:
+        raise ValueError("Development modules in app bundle: " + ", ".join(unexpected))
 
 
 def bundle_metadata(*, version: str, build: int, feed_url: str = "", public_key: str = "") -> dict:
@@ -30,7 +45,7 @@ def bundle_metadata(*, version: str, build: int, feed_url: str = "", public_key:
     data = {"CFBundleIdentifier": MAC_BUNDLE_ID, "CFBundleName": APP_NAME,
             "CFBundleShortVersionString": version, "CFBundleVersion": str(build),
             "NSHighResolutionCapable": True, "NSPrincipalClass": "NSApplication",
-            "LSMinimumSystemVersion": "12.0"}
+            "LSMinimumSystemVersion": MAC_MINIMUM_VERSION}
     if feed_url:
         data.update(SUFeedURL=feed_url, SUPublicEDKey=public_key, SUEnableAutomaticChecks=False,
                     SUAutomaticallyUpdate=False, SUAllowsAutomaticUpdates=False,
@@ -66,6 +81,7 @@ def sign_bundle(app: Path, identity: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build-number", required=True, type=int)
+    parser.add_argument("--analysis-runtime", type=Path, required=True, help="Portable runtime from scripts/build_analysis_runtime.py")
     parser.add_argument("--development", action="store_true")
     parser.add_argument("--feed-url", default="")
     parser.add_argument("--public-key", default="")
@@ -77,6 +93,16 @@ def main() -> int:
     args = parser.parse_args()
     if sys.platform != "darwin":
         parser.error("Build this app on macOS, once on arm64 and once on x86_64 if supporting both")
+    analysis_runtime = args.analysis_runtime.resolve()
+    if not (analysis_runtime / "bin/python3.12").is_file() or not (analysis_runtime / "paperdesk-analysis.json").is_file():
+        parser.error("Build the portable Docling runtime first")
+    analysis_manifest = json.loads((analysis_runtime / "paperdesk-analysis.json").read_text())
+    if analysis_manifest.get("lock_sha256") != hashlib.sha256((ROOT / "requirements/docling-macos.lock").read_bytes()).hexdigest():
+        parser.error("The Docling runtime does not match requirements/docling-macos.lock")
+    from release_preflight import dependency_issues
+    issues = dependency_issues()
+    if issues:
+        parser.error('Install requirements/macos-build.lock first: ' + '; '.join(issues))
     if not args.development and not all([args.feed_url, args.public_key, args.sparkle_framework, args.identity]):
         parser.error("Release builds need --feed-url, --public-key, --sparkle-framework and --identity")
     if args.development and any([args.feed_url, args.public_key, args.sparkle_framework]):
@@ -99,8 +125,8 @@ def main() -> int:
     if args.sparkle_framework and (sparkle_license is None or not sparkle_license.is_file()):
         parser.error("Supply --sparkle-license with the LICENSE from your Sparkle distribution")
     arch = platform.machine()
-    if arch not in ("arm64", "x86_64"):
-        parser.error("Unsupported build architecture")
+    if arch != "arm64":
+        parser.error("The initial macOS beta supports Apple Silicon (arm64) only")
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     stem = f"{APP_NAME}-{__version__}-{args.build_number}-{arch}"
@@ -109,30 +135,73 @@ def main() -> int:
         parser.error(f"Refusing to overwrite a release artifact: {dmg}")
     work = ROOT / "build/macos" / stem
     work.mkdir(parents=True, exist_ok=True)
-    iconset = work / "AppIcon.iconset"
-    iconset.mkdir(exist_ok=True)
-    for size in (16, 32, 128, 256, 512):
-        for scale in (1, 2):
-            name = f"icon_{size}x{size}" + ("@2x" if scale == 2 else "") + ".png"
-            run("sips", "-z", size * scale, size * scale, ROOT / "packaging/macos/icon-concept-v1.png",
-                "--out", iconset / name)
-    icon = work / "AppIcon.icns"
-    run("iconutil", "-c", "icns", iconset, "-o", icon)
+    icon_output = work / "icons"
+    icon_output.mkdir(exist_ok=True)
+    icon_info = work / "icon-info.plist"
+    run("xcrun", "actool", "--compile", icon_output, "--platform", "macosx",
+        "--minimum-deployment-target", "15.0", "--app-icon", APP_NAME,
+        "--output-partial-info-plist", icon_info, ROOT / "packaging/macos/Paperdesk.icon")
+    icon = icon_output / (APP_NAME + ".icns")
     run(sys.executable, "-m", "PyInstaller", "--noconfirm", "--windowed", "--onedir", "--name", APP_NAME,
         "--osx-bundle-identifier", MAC_BUNDLE_ID, "--icon", icon, "--paths", ROOT / "src",
         "--add-data", f"{ROOT / 'src/paperdesk/web/static'}:paperdesk/web/static",
+        "--add-data", f"{ROOT / 'src/paperdesk/infrastructure/docling_worker.py'}:paperdesk/infrastructure",
         "--hidden-import", "webview.platforms.cocoa", "--hidden-import", "PyObjCTools.AppHelper",
+        "--exclude-module", "tests", "--exclude-module", "experiments",
         "--exclude-module", "PyQt5", "--exclude-module", "PyQt6", "--exclude-module", "PySide6",
         "--specpath", work, "--workpath", work / "freeze", "--distpath", work / "dist",
         ROOT / "packaging/macos/launcher.py")
     app = work / "dist" / (APP_NAME + ".app")
+    verify_production_modules(app / "Contents/MacOS" / APP_NAME)
     plist = app / "Contents/Info.plist"
     data = plistlib.loads(plist.read_bytes())
     data.update(metadata)
+    data.update(plistlib.loads(icon_info.read_bytes()))
     plist.write_bytes(plistlib.dumps(data))
     resources = app / "Contents/Resources"
     resources.mkdir(exist_ok=True)
+    shutil.copytree(analysis_runtime, resources / "analysis-runtime", symlinks=True)
+    shutil.copy2(icon_output / "Assets.car", resources / "Assets.car")
+    shutil.copy2(icon, resources / icon.name)
     shutil.copy2(ROOT / "THIRD_PARTY_NOTICES.md", resources / "THIRD_PARTY_NOTICES.md")
+    for name in ('LICENSE', 'NOTICE', 'docs/privacy.md', 'docs/support.md'):
+        source = ROOT/name
+        if source.is_file():
+            shutil.copy2(source, resources/source.name)
+    dependencies = {line.split('==')[0]: importlib.metadata.version(line.split('==')[0])
+                    for line in (ROOT/'requirements/macos-build.lock').read_text().splitlines()
+                    if line and not line.startswith('#')}
+    source_hash = hashlib.sha256()
+    sources = [p for folder in ('src', 'scripts', 'packaging', 'requirements') for p in (ROOT/folder).rglob('*')
+               if p.is_file() and '__pycache__' not in p.parts]
+    sources += [ROOT/'pyproject.toml', ROOT/'THIRD_PARTY_NOTICES.md']
+    for name in ('LICENSE', 'NOTICE'):
+        if (ROOT/name).is_file():
+            sources.append(ROOT/name)
+    for source in sorted(sources):
+        source_hash.update(str(source.relative_to(ROOT)).encode()+b'\0'+source.read_bytes())
+    manifest = {'version': __version__, 'build': args.build_number, 'arch': arch,
+                'python': platform.python_version(), 'dependencies': dependencies,
+                'analysis_runtime': analysis_manifest,
+                'source_tree_sha256': source_hash.hexdigest(),
+                'lock_sha256': hashlib.sha256((ROOT/'requirements/macos-build.lock').read_bytes()).hexdigest()}
+    (resources/'build-manifest.json').write_text(json.dumps(manifest, indent=2)+'\n')
+    licenses = resources/'licenses'
+    licenses.mkdir(exist_ok=True)
+    python_license = Path(sysconfig.get_path('stdlib'))/'LICENSE.txt'
+    if not python_license.is_file():
+        parser.error('The Python distribution LICENSE.txt is required for bundling')
+    shutil.copy2(python_license, licenses/'CPython-LICENSE.txt')
+    for dependency in dependencies:
+        distribution = importlib.metadata.distribution(dependency)
+        for entry in distribution.files or ():
+            name = str(entry)
+            if '.dist-info/' in name and ('/licenses/' in name or entry.name.upper().startswith(('LICENSE','COPYING'))):
+                source = Path(distribution.locate_file(entry))
+                if source.is_file():
+                    destination = licenses/dependency/name.split('.dist-info/', 1)[1]
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, destination)
     if args.sparkle_framework:
         frameworks = app / "Contents/Frameworks"
         frameworks.mkdir(exist_ok=True)
@@ -163,7 +232,7 @@ def main() -> int:
         run("xcrun", "notarytool", "submit", dmg, "--keychain-profile", args.notary_profile, "--wait")
         run("xcrun", "stapler", "staple", dmg)
     # Used by the release renderer to reject unsigned/development artifacts.
-    receipt = {"version": __version__, "build": args.build_number, "arch": arch,
+    receipt = {**manifest,
                "updates": bool(args.feed_url), "signed": bool(args.identity),
                "notarized": bool(args.notary_profile), "bundle_id": MAC_BUNDLE_ID}
     dmg.with_suffix(".json").write_text(json.dumps(receipt, indent=2) + "\n")

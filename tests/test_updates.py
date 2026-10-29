@@ -8,6 +8,7 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
+from contextlib import closing
 from pathlib import Path
 from unittest import mock
 
@@ -135,12 +136,12 @@ class UpdateTests(unittest.TestCase):
         try:
             doc, _ = app.library.import_pdf('old.pdf', make_pdf(['Data before an update']))
             # A real older installed schema, with existing user documents in WAL mode.
-            with sqlite3.connect(app.paths.database) as connection:
-                connection.executescript('DROP TABLE conversations; DROP TABLE preferences; PRAGMA user_version=3;')
+            with closing(sqlite3.connect(app.paths.database)) as connection, connection:
+                connection.executescript('DROP TABLE translation_jobs; DROP TABLE conversations; DROP TABLE preferences; PRAGMA user_version=3;')
             Database(app.paths.database)
             backups = list((app.paths.root / 'backups/migrations').glob('*.sqlite3'))
             self.assertEqual(len(backups), 1)
-            with sqlite3.connect(backups[0]) as backup:
+            with closing(sqlite3.connect(backups[0])) as backup:
                 self.assertEqual(backup.execute('PRAGMA user_version').fetchone()[0], 3)
                 self.assertEqual(backup.execute('SELECT title FROM documents WHERE id=?',(doc.id,)).fetchone()[0], doc.title)
             Database(app.paths.database)
@@ -156,7 +157,7 @@ class UpdateTests(unittest.TestCase):
                             ('CREATE TABLE should_rollback(x); INVALID SQL;',)):
                 with self.assertRaises(sqlite3.Error):
                     Database(app.paths.database)
-            with sqlite3.connect(app.paths.database) as connection:
+            with closing(sqlite3.connect(app.paths.database)) as connection, connection:
                 self.assertEqual(connection.execute('PRAGMA user_version').fetchone()[0], len(MIGRATIONS))
                 self.assertIsNone(connection.execute("SELECT name FROM sqlite_master WHERE name='should_rollback'").fetchone())
                 connection.execute('PRAGMA user_version=99')
@@ -167,6 +168,15 @@ class UpdateTests(unittest.TestCase):
 
 
 class MacReleaseTests(unittest.TestCase):
+    def test_cask_and_bundle_share_the_minimum_macos_version(self):
+        from paperdesk import MAC_MINIMUM_CASK, MAC_MINIMUM_VERSION
+        metadata = script('build_macos').bundle_metadata(version='1.2.3', build=27)
+        artifact = {'version':'1.2.3', 'build':27, 'bundle_id':'org.paperdesk.Paperdesk', 'arch':'arm64', 'sha256':'a'*64}
+        text = script('release_macos').render_cask('example/paperdesk', [artifact])
+        self.assertEqual(metadata['LSMinimumSystemVersion'], MAC_MINIMUM_VERSION)
+        self.assertEqual((MAC_MINIMUM_VERSION, MAC_MINIMUM_CASK), ('15.0', 'sequoia'))
+        self.assertIn(f'depends_on macos: :{MAC_MINIMUM_CASK}', text)
+
     def test_cask_uses_native_app_versions_and_keeps_user_data(self):
         release = script('release_macos')
         shared = {'version':'1.2.3', 'build':27, 'bundle_id':'org.paperdesk.Paperdesk'}

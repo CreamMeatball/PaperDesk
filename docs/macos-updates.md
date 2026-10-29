@@ -31,10 +31,11 @@ The following commands use example paths and the placeholder account `OWNER`; th
 ## Build a local test DMG
 
 ```sh
-python3 scripts/build_macos.py --development --build-number 1
+python3 scripts/build_analysis_runtime.py /absolute/path/analysis-runtime
+python3 scripts/build_macos.py --development --build-number 1 --analysis-runtime /absolute/path/analysis-runtime
 ```
 
-This produces an ad-hoc-signed `.app` inside a DMG for testing on your own Mac. Python, the web UI and native window dependencies are bundled; the user's Mac does not need a separate Python installation. The first icon concept is converted to ICNS using macOS tools. This development artifact has no native updater and cannot be passed to the release renderer.
+This produces an ad-hoc-signed `.app` inside a DMG for testing on your own Mac. Python, the web UI, native window dependencies and a separate portable Docling runtime are bundled; the user's Mac does not need a separate Python installation. The first icon concept is converted to ICNS using macOS tools. This development artifact has no native updater and cannot be passed to the release renderer.
 
 ## Build a release with updates
 
@@ -45,6 +46,7 @@ Use the **same public key** on subsequent builds, the same bundle identifier (`o
 ```sh
 python3 scripts/build_macos.py \
   --build-number 1 \
+  --analysis-runtime /absolute/path/analysis-runtime \
   --feed-url https://github.com/OWNER/paperdesk/releases/latest/download/appcast-arm64.xml \
   --public-key 'PUBLIC_ED25519_KEY_FROM_GENERATE_KEYS' \
   --sparkle-framework /path/to/Sparkle.framework \
@@ -87,3 +89,17 @@ Before upgrading an existing database schema, Paperdesk makes a SQLite online ba
 Test a real signed/notarized older build → newer build on a Mac: manual check, automatic-check opt-in persistence, cancel, failed download, install/relaunch, Homebrew upgrade, and preservation of PDF files, notes, translations and chats. Linux tests cover the settings/API contract, unavailable-build behavior, release metadata validation, Cask generation and database migration safeguards; they do not execute Sparkle or notarization.
 
 Sources: [Sparkle setup](https://sparkle-project.org/documentation/), [programmatic setup](https://sparkle-project.org/documentation/programmatic-setup/), [settings and signature configuration](https://sparkle-project.org/documentation/customization/), [Homebrew Cask cookbook](https://docs.brew.sh/Cask-Cookbook).
+
+## Beta release gates added after the first Mac verification
+
+The first packaged beta is arm64/macOS 15+, built with Python 3.12 and `requirements/macos-build.lock`. Install that lock before the project (`pip install --no-deps .`). The builder checks pinned dependencies and embeds a build manifest; other architectures are currently refused. The earlier dual-architecture examples describe the eventual format, not a claim that Intel is supported now.
+
+Before invoking `release_macos.py`, complete the exact build's `packaging/macos/release-checks.example.json` record and pass `--checks /absolute/path/to/completed-checks.json`. A selected project LICENSE and all release checks are required. The script also verifies the final DMG's code signature and stapled notarization ticket on macOS. See `docs/release-readiness.md` for key ownership, clean-install testing, backup/restore, interrupted translation and signed-update verification. Do not change an artifact after computing its release signature or checksum.
+
+The native app icon is compiled from `packaging/macos/Paperdesk.icon` with Xcode 27 or newer (`xcrun actool`). Keep the generated `Assets.car` and fallback ICNS together in the app resources so macOS 15 and newer systems use the appropriate icon format.
+
+## Local document analysis
+
+Docling 2.142.1 runs in a separate CPU process. The portable runtime uses CPython 3.12.12 and requirements/docling-macos.lock; it is copied into Contents/Resources/analysis-runtime. The first analysis downloads the pinned Heron model revision from Hugging Face to the private application data directory. Cached model runs use offline mode. OCR, table-cell reconstruction, formula transcription, remote services and telemetry are disabled. PDFs stay local. Runtime and model preparation states appear in the reader; failures keep the original readable and offer an explicit retry. Model memory is released when the worker exits.
+
+Build the runtime on Apple Silicon using the pinned uv in requirements/macos-build.lock. It is relocatable and does not require Python or pip on the recipient's Mac. Its dependency license files remain in the runtime's site-packages metadata. The runtime significantly increases the DMG size. A source/CLI Formula must also provision the analysis extra; the signed Cask uses the self-contained app.

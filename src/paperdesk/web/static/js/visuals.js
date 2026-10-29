@@ -26,7 +26,9 @@ export class Visuals {
     reader.pagesEl.addEventListener("mouseleave", function () { self.scheduleHide(); });
   }
 
-  destroy() { this.box.remove(); }
+  destroy() { clearTimeout(this.hideTimer); this.box.remove(); }
+
+  onScroll() { clearTimeout(this.hideTimer); this.hideTimer = null; this.box.remove(); this.current = null; }
 
   onAnalysis() {
     var self = this, analysis = this.reader.analysis;
@@ -62,21 +64,28 @@ export class Visuals {
     return spots;
   }
 
-  // Popover content for a hovered reference. Same page: flash the target instead and return null.
+  imageFor(target) {
+    var rect = target.imageRect || target.rect, key = target.page + ":" + rect.join(","), self = this;
+    if (!this.images.has(key)) {
+      var pending = this.reader.cropImage(target.page, rect, 900).catch(function (error) { self.images.delete(key); throw error; });
+      this.images.set(key, pending);
+    }
+    return this.images.get(key);
+  }
+
+  // Same-page references pulse in the original; other pages show a cropped preview.
   previewContent(target, hoveredPage) {
     var self = this;
     if (target.page === hoveredPage) {
-      this.reader.flashRect(target.page, target.rect, false);
+      this.reader.flashRect(target.page, target.rect, false, true);
       return null;
     }
     var img = h("img", { class: "visual-img", alt: visualName(target) });
-    var key = target.page + ":" + target.rect.join(",");
-    if (this.images.has(key)) img.src = this.images.get(key);
-    else this.reader.cropImage(target.page, target.rect, 900).then(function (url) { self.images.set(key, url); img.src = url; });
+    this.imageFor(target).then(function (url) { if (self.reader.alive) img.src = url; }).catch(function (error) { console.warn(error); });
     return h("div", { class: "visual-preview" },
       h("div", { class: "cite-label" }, visualName(target), h("span", null, " · " + t("{n}쪽", { n: target.page }))),
       img,
-      target.caption && target.kind !== "equation" ? h("div", { class: "visual-caption" }, target.caption.length > 320 ? target.caption.slice(0, 320) + "…" : target.caption) : null,
+      target.caption && target.kind !== "equation" ? h("div", { class: "visual-caption" }, target.caption) : null,
       h("div", { class: "cite-actions" },
         h("button", { class: "btn small", onclick: function () { self.reader.citations.hide(); self.reader.flashRect(target.page, target.rect, true); } }, icon("chevron", 13), t("{n}쪽으로 이동", { n: target.page })),
         h("button", { class: "btn small", onclick: function () { self.reader.citations.hide(); self.explain(target); } }, icon("sparkle", 13), t("{name} 설명", { name: visualName(target) }))));
@@ -85,7 +94,7 @@ export class Visuals {
   // ---------- hover outline + explain button ----------
   onMove(event) {
     if (event.buttons || !this.reader.analysis || this.reader.area.active) return;
-    if (event.target.closest && event.target.closest(".visual-hover")) { clearTimeout(this.hideTimer); return; }
+    if (event.target.closest && event.target.closest(".visual-hover")) { clearTimeout(this.hideTimer); this.hideTimer = null; return; }
     var pageEl = event.target.closest && event.target.closest(".page");
     if (!pageEl) { this.scheduleHide(); return; }
     var box = pageEl.getBoundingClientRect(), px = (event.clientX - box.left) / box.width, py = (event.clientY - box.top) / box.height;
@@ -97,6 +106,7 @@ export class Visuals {
 
   show(pageEl, target) {
     clearTimeout(this.hideTimer);
+    this.hideTimer = null;
     if (this.current === target && this.box.parentNode) return;
     this.current = target;
     var layer = pageEl.querySelector(".layer.ui"), r = target.rect;
@@ -107,9 +117,9 @@ export class Visuals {
   }
 
   scheduleHide() {
-    clearTimeout(this.hideTimer);
+    if (this.hideTimer) return;
     var self = this;
-    this.hideTimer = setTimeout(function () { self.box.remove(); self.current = null; }, 220);
+    this.hideTimer = setTimeout(function () { self.hideTimer = null; self.box.remove(); self.current = null; }, 120);
   }
 
   mentions(target) {
@@ -125,7 +135,7 @@ export class Visuals {
     var reader = this.reader;
     this.box.remove();
     var image;
-    try { image = await reader.cropImage(target.page, target.rect, 1600); } catch (error) { console.warn(error); }
+    try { image = await reader.cropImage(target.page, target.imageRect || target.rect, 1600); } catch (error) { console.warn(error); }
     var request = target.kind === "equation"
       ? { task: "equation", text: target.text, context: reader.textAround(target.key, 3500, 1500) }
       : { task: "figure", text: target.caption || visualName(target), context: this.mentions(target) };

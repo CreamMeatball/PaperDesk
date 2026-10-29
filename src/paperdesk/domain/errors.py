@@ -23,3 +23,15 @@ class ProviderUnavailable(ReaderError):
 class ProviderFailed(ReaderError):
     status = 502
     code = "provider_failed"
+
+
+class ProviderAuthRequired(ProviderFailed):
+    code = "auth_required"
+
+
+class ProviderLimitReached(ProviderFailed):
+    code = "rate_limited"
+
+
+class UnsupportedModel(ProviderFailed):
+    code = "unsupported_model"

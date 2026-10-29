@@ -36,6 +36,12 @@ class PaperdeskServer(ThreadingHTTPServer):
         self.static_dir = static_dir.resolve()
         self.router = Router()
         ApiController(app).register(self.router)
+        app.jobs.start()
+
+    def server_close(self) -> None:
+        self.app.analysis.close()
+        self.app.jobs.close()
+        super().server_close()
 
     @property
     def url(self) -> str:
@@ -133,8 +139,9 @@ class RequestHandler(BaseHTTPRequestHandler):
     def _boot_script(self) -> Response:
         # Loaded synchronously before first paint so the saved theme and panel state apply without a flash.
         # A script file (not inline) keeps the Content-Security-Policy free of 'unsafe-inline'.
-        prefs = json.dumps(self.server.app.preferences.all(), ensure_ascii=False).replace("<", "\\u003c")
-        body = f"window.paperdeskBoot = {{ preferences: {prefs} }};\n".encode("utf-8")
+        data = json.dumps({'preferences': self.server.app.preferences.all(),
+                           'restoreFailed': self.server.app.restore_failed}, ensure_ascii=False).replace("<", "\\u003c")
+        body = f"window.paperdeskBoot = {data};\n".encode("utf-8")
         return Response(200, body, "text/javascript; charset=utf-8", {"Cache-Control": "no-store"})
 
     def _send(self, response: Response) -> None:

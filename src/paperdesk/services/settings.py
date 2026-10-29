@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import re
 
 from ..config import LANGUAGES
 from ..domain.errors import InvalidInput
@@ -10,6 +11,7 @@ from ..ports.secrets import SecretStore
 from ..ports.settings import Settings, SettingsStore
 from ..providers.registry import ProviderRegistry
 from ..i18n import SUPPORTED, _
+from ..domain.errors import ReaderError
 
 
 class SettingsService:
@@ -30,11 +32,15 @@ class SettingsService:
         current = settings or self._store.load()
         return ProviderContext(provider_id, current.options_for(provider_id), self._secrets, self._runner, self._http)
 
-    def provider(self, provider_id: str) -> AIProvider:
-        return self._registry.create(provider_id, self.context_for(provider_id))
+    def provider(self, provider_id: str, *, values: dict | None = None) -> AIProvider:
+        from dataclasses import replace
+        context = self.context_for(provider_id)
+        if values is not None:
+            context = replace(context, values=values)
+        return self._registry.create(provider_id, context)
 
-    def active_provider(self) -> AIProvider | None:
-        settings = self._store.load()
+    def active_provider(self, settings: Settings | None = None) -> AIProvider | None:
+        settings = settings or self._store.load()
         if not settings.provider or not self._registry.has(settings.provider):
             return None
         return self._registry.create(settings.provider, self.context_for(settings.provider, settings))
@@ -42,16 +48,58 @@ class SettingsService:
     def view(self) -> dict:
         settings = self._store.load()
         return {
-            "provider": settings.provider,
+            "provider": settings.provider if self._registry.has(settings.provider) else "",
             "target_language": settings.target_language,
             "ui_language": settings.ui_language,
+            "auto_translate": settings.auto_translate,
             "languages": sorted(set(LANGUAGES.values())),
             "providers": [self._registry.create(pid, self.context_for(pid, settings)).describe() for pid in self._registry.ids()],
         }
 
+    def available_models(self, provider_id: str) -> dict:
+        return {"models": self.provider(provider_id).available_models()}
+
+    def initialize_ai(self) -> dict:
+        """Use existing CLI logins on first entry; never probe by sending an AI prompt."""
+        current = self.load()
+        candidates = [current.provider] if current.provider else [pid for pid in ('codex-cli', 'claude-code') if self._registry.has(pid)]
+        for pid in candidates:
+            if not self._registry.has(pid):
+                continue
+            provider = self.provider(pid)
+            if provider.kind != 'local-cli' or not provider.status().available:
+                continue
+            if not provider.model:
+                try:
+                    models = provider.available_models()
+                except (ReaderError, OSError):
+                    models = []
+                luna = [m for m in models if re.search(r'(?:^|-)luna(?:$|-)', m)]
+                model = max(luna, key=lambda m: tuple(map(int, re.findall(r'\d+', m)))) if luna else (models[0] if models else '')
+                if model:
+                    self.update_provider(pid, {'model': model})
+            if not current.provider:
+                self.update_general(provider=pid)
+            break
+        return self.view()
+
+    def discover_provider(self, provider_id: str) -> dict:
+        provider = self.provider(provider_id)
+        if not hasattr(provider, 'discover'):
+            raise InvalidInput(_("이 연결은 CLI 설치 확인을 사용하지 않아요."))
+        result = provider.discover()
+        # Explicit user action; select the discovered executable, but never change models or providers silently.
+        if result['selected']:
+            self.update_provider(provider_id, {'binary': result['selected']})
+        return result
+
     def update_general(self, *, provider: str | None = None, target_language: str | None = None,
-                       ui_language: str | None = None) -> Settings:
+                       ui_language: str | None = None, auto_translate: bool | None = None) -> Settings:
         settings = self._store.load()
+        if auto_translate is not None:
+            if not isinstance(auto_translate, bool):
+                raise InvalidInput(_("자동 번역 설정을 확인해 주세요."))
+            settings.auto_translate = auto_translate
         if provider is not None:
             if provider and not self._registry.has(provider):
                 raise InvalidInput(_("알 수 없는 AI 연결: {id}", id=provider))
@@ -100,6 +148,9 @@ class SettingsService:
         if not state.available:
             return {"ok": False, "message": state.detail}
         started = time.monotonic()
-        completion = provider.complete(Prompt("Reply with text only. Do not use tools.", "Reply with exactly: OK"))
+        try:
+            completion = provider.complete(Prompt("Reply with text only. Do not use tools.", "Reply with exactly: OK"))
+        except ReaderError as error:
+            return {"ok": False, "code": error.code, "message": error.args[0]}
         return {"ok": True, "message": completion.text.strip()[:200], "model": completion.model,
                 "seconds": round(time.monotonic() - started, 1)}

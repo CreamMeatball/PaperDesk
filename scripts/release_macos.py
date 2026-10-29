@@ -16,10 +16,13 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+from paperdesk import MAC_MINIMUM_CASK
 SPARKLE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
 
 
@@ -34,6 +37,9 @@ def artifact(path: Path) -> dict:
     expected = f"Paperdesk-{meta['version']}-{meta['build']}-{meta['arch']}.dmg"
     if path.name != expected:
         raise ValueError(f"Artifact must be named {expected}")
+    if sys.platform == 'darwin':
+        subprocess.run(['codesign', '--verify', '--strict', str(path)], check=True)
+        subprocess.run(['xcrun', 'stapler', 'validate', str(path)], check=True)
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
@@ -64,7 +70,7 @@ def render_cask(repo: str, artifacts: list[dict]) -> str:
         arch_part = cpu
     lines += ['', f'  url "https://github.com/{repo}/releases/download/v#{{version.csv.first}}/Paperdesk-#{{version.csv.first}}-#{{version.csv.second}}-{arch_part}.dmg"',
               '  name "Paperdesk"', '  desc "Local paper reader with pluggable AI assistants"',
-              f'  homepage "https://github.com/{repo}"', '', '  auto_updates true', '  depends_on macos: ">= :monterey"']
+              f'  homepage "https://github.com/{repo}"', '', '  auto_updates true', f'  depends_on macos: :{MAC_MINIMUM_CASK}']
     if len(by_arch) == 1:
         lines += ['  depends_on arch: ' + (':arm64' if first['arch'] == 'arm64' else ':x86_64')]
     lines += ['', '  app "Paperdesk.app"',
@@ -100,10 +106,18 @@ def main() -> int:
     parser.add_argument('--repo', required=True)
     parser.add_argument('--dmg', type=Path, action='append', required=True)
     parser.add_argument('--sparkle-bin', type=Path, required=True)
+    parser.add_argument('--checks', type=Path, action='append', required=True,
+                        help='One completed manual verification record per architecture; see packaging/macos/release-checks.example.json')
     parser.add_argument('--out', type=Path, default=ROOT / 'dist/release')
     args = parser.parse_args()
     try:
         releases = [artifact(path.resolve()) for path in args.dmg]
+        from release_preflight import check_release
+        for release in releases:
+            records = [path for path in args.checks if json.loads(path.read_text()).get('architecture') == release['arch']]
+            if len(records) != 1:
+                raise ValueError('Supply exactly one verification record per release architecture')
+            check_release(records[0], version=release['version'], build=release['build'], architecture=release['arch'])
         cask = render_cask(args.repo, releases)
     except (ValueError, OSError) as error:
         parser.error(str(error))

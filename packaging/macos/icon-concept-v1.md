@@ -12,3 +12,5 @@ Symbol: one bold sculptural silver-gray folded-paper ribbon, forming a subtle up
 Palette and material: near-black charcoal tile (#171719 to #242426), cool graphite and soft silver-gray mark (#949498 to #dedee0), gentle tightly controlled tonal gradients, a delicate edge highlight on the fold, understated shallow relief and soft contact shadow. Modern precision, matte satin surfaces, tactile but restrained. Entire image strictly achromatic grayscale.
 Constraints: original identity, no wordmark, no written text, no captions, no grid, no additional variants, no presentation mockup, no devices. Do not copy another brand's logo. No AI sparkles, stars, academic caps, circuits, brain symbols, magnifying glasses, excessive gloss, chrome reflections, neon, colorful accents, grain, or ornament. Produce a polished icon asset, not a logo sheet.
 
+
+배포용 아이콘은 Paperdesk.icon의 네이티브 배경·배치 설정으로 원본 PNG를 재사용한다. 불투명 차콜 배경과 106% 레이어 배치로 시스템 아이콘 타일 안에 별도 회색 여백이 생기지 않게 하고 P가 잘리지 않도록 한다. 빌드 시 actool이 최신 macOS용 Assets.car와 이전 macOS용 ICNS를 함께 만든다.

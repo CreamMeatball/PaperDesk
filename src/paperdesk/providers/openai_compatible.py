@@ -59,7 +59,7 @@ class OpenAICompatibleProvider(AIProvider):
         return [{"type": "text", "text": prompt.user}] + [
             {"type": "image_url", "image_url": {"url": image.data_url}} for image in prompt.images]
 
-    def complete(self, prompt: Prompt) -> Completion:
+    def resolve_model(self) -> str:
         model = self.model
         if not model:
             try:
@@ -69,6 +69,10 @@ class OpenAICompatibleProvider(AIProvider):
             if not models:
                 raise ProviderUnavailable(_("서버에 불러온 모델이 없어요."))
             model = models[0]
+        return model
+
+    def complete(self, prompt: Prompt) -> Completion:
+        model = self.resolve_model()
         data = self.context.http.post_json(
             f"{self.base_url}/chat/completions",
             headers=self._headers(),

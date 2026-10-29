@@ -55,6 +55,38 @@ function mathRatio(text) {
   return symbols / plain.length + (words <= 1 ? 0.1 : 0) - words * 0.03;
 }
 
+// A gutter is a vertical gap supported by many rows, not an unusually wide word space.
+function columnGutter(rows, width) {
+  var votes = new Map();
+  rows.forEach(function (row) {
+    var runs = row.runs.slice().sort(function (a, b) { return a.x0 - b.x0; });
+    var left = Math.min.apply(null, runs.map(function (r) { return r.x0; }));
+    var right = Math.max.apply(null, runs.map(function (r) { return r.x1; })), end = left;
+    runs.forEach(function (run) {
+      for (var x = Math.ceil(Math.max(end + 1, width * 0.3)); x < Math.min(run.x0 - 1, width * 0.7); x++) {
+        if (x - left > width * 0.2 && right - x > width * 0.2) votes.set(x, (votes.get(x) || 0) + 1);
+      }
+      end = Math.max(end, run.x1);
+    });
+  });
+  var best = Math.max(0, ...votes.values());
+  if (best < Math.max(6, rows.length * 0.2)) return null;
+  var positions = Array.from(votes.keys()).filter(function (x) { return votes.get(x) === best; }).sort(function (a, b) { return a - b; });
+  return positions[Math.floor(positions.length / 2)];
+}
+
+function baselineRows(runs) {
+  var rows = [];
+  runs.slice().sort(function (a, b) { return a.base - b.base || a.x0 - b.x0; }).forEach(function (run) {
+    var row = rows[rows.length - 1];
+    if (row && Math.abs(run.base - row.base) < Math.max(2, Math.min(row.size, run.size) * 0.45)) {
+      row.runs.push(run);
+      if (run.size > row.size) { row.size = run.size; row.base = run.base; }
+    } else rows.push({ base: run.base, size: run.size, runs: [run] });
+  });
+  return rows;
+}
+
 // ---- 1. glyph runs -> lines ----
 function pageLines(page) {
   var view = page.view || [0, 0, page.width, page.height];
@@ -64,17 +96,21 @@ function pageLines(page) {
     var t = item.transform, size = item.height || Math.hypot(t[2], t[3]) || 1;
     if (Math.abs(t[1]) > Math.abs(t[0]) * 0.5) return; // rotated text (watermarks, arXiv side stamp)
     var x0 = t[4] - view[0], base = view[3] - t[5];
-    runs.push({ str: item.str, x0: x0, x1: x0 + Math.max(item.width || 0, size * 0.3), base: base, size: size,
-      top: base - size * 0.82, bottom: base + size * 0.22 });
+    var font = page.styles && page.styles[item.fontName];
+    runs.push({ str: item.str, font: item.fontName, x0: x0, x1: x0 + Math.max(item.width || 0, size * 0.3), base: base, size: size,
+      top: base - size * Math.max(0.82, font ? font.ascent : 0), bottom: base + size * Math.max(0.22, font ? -font.descent : 0) });
   });
-  runs.sort(function (a, b) { return a.base - b.base || a.x0 - b.x0; });
+  var rough = baselineRows(runs), gutter = columnGutter(rough, page.width), groups = {};
+  rough.forEach(function (row) {
+    var full = gutter !== null && row.runs.some(function (r) { return r.x0 < gutter && r.x1 > gutter; });
+    row.runs.forEach(function (run) {
+      var col = gutter === null ? "S" : full ? "F" : run.x1 <= gutter ? "L" : "R";
+      (groups[col] || (groups[col] = [])).push(run);
+    });
+  });
   var rows = [];
-  runs.forEach(function (run) {
-    var row = rows[rows.length - 1];
-    if (row && Math.abs(run.base - row.base) < Math.max(2, Math.min(row.size, run.size) * 0.45)) {
-      row.runs.push(run);
-      if (run.size > row.size) { row.size = run.size; row.base = run.base; }
-    } else rows.push({ base: run.base, size: run.size, runs: [run] });
+  Object.keys(groups).forEach(function (col) {
+    baselineRows(groups[col]).forEach(function (row) { row.col = col; rows.push(row); });
   });
   // Sub/superscripts sit on their own baseline; fold small, short rows into the neighbouring text row
   // so "v" + "θ" or "word" + "2" stay on one line instead of splitting paragraphs.
@@ -85,7 +121,7 @@ function pageLines(page) {
     var x0 = Math.min.apply(null, row.runs.map(function (r) { return r.x0; })), x1 = Math.max.apply(null, row.runs.map(function (r) { return r.x1; }));
     var best = null, distance = Infinity;
     [rows[index - 1], rows[index + 1]].forEach(function (other) {
-      if (!other || other.size < normal * 0.8) return;
+      if (!other || other.col !== row.col || other.size < normal * 0.8) return;
       var ox0 = Math.min.apply(null, other.runs.map(function (r) { return r.x0; })), ox1 = Math.max.apply(null, other.runs.map(function (r) { return r.x1; }));
       var d = Math.abs(other.base - row.base);
       if (d < other.size * 0.95 && x1 > ox0 - other.size && x0 < ox1 + other.size && d < distance) { best = other; distance = d; }
@@ -100,7 +136,7 @@ function pageLines(page) {
     var segment = null, segments = [];
     row.runs.forEach(function (run) {
       var gap = segment ? run.x0 - segment.x1 : 0;
-      if (!segment || gap > Math.max(row.size * 1.3, 7)) {
+      if (!segment || gap > Math.max(row.size * 2.5, 7)) {
         segment = { runs: [run], x0: run.x0, x1: run.x1 };
         segments.push(segment);
       } else {
@@ -125,7 +161,7 @@ function pageLines(page) {
         sizes.push(run.size);
         previous = run;
       });
-      lines.push({ page: page.number, x0: seg.x0, x1: seg.x1, base: row.base,
+      lines.push({ page: page.number, col: row.col, x0: seg.x0, x1: seg.x1, base: row.base,
         top: Math.min.apply(null, seg.runs.map(function (r) { return r.top; })),
         bottom: Math.max.apply(null, seg.runs.map(function (r) { return r.bottom; })),
         size: median(sizes), text: text.replace(/\s+/g, " ").trim(), runs: seg.runs, siblings: segments.length - 1 });
@@ -136,14 +172,9 @@ function pageLines(page) {
 
 // ---- 2. columns and reading order ----
 function orderLines(lines, width) {
-  var mid = width / 2;
-  lines.forEach(function (l) {
-    if (l.x0 < mid - width * 0.03 && l.x1 > mid + width * 0.03) l.col = "F";
-    else l.col = (l.x0 + l.x1) / 2 < mid ? "L" : "R";
-  });
-  var narrow = lines.filter(function (l) { return l.col !== "F"; });
-  var left = narrow.filter(function (l) { return l.col === "L"; }).length, right = narrow.length - left;
-  var twoColumn = left >= 6 && right >= 6 && Math.min(left, right) >= lines.length * 0.2;
+  var left = lines.filter(function (l) { return l.col === "L"; }).length;
+  var right = lines.filter(function (l) { return l.col === "R"; }).length;
+  var twoColumn = left >= 6 && right >= 6;
   if (!twoColumn) {
     lines.forEach(function (l) { l.col = "S"; });
     return { lines: lines.slice().sort(function (a, b) { return a.top - b.top || a.x0 - b.x0; }), twoColumn: false };
@@ -202,13 +233,16 @@ function makeBlocks(lines, ctx) {
     }
     var gap = line.top - prev.bottom, size = Math.max(line.size, prev.size);
     if (current.lineKind === "math" && line.kind === "math") return gap > size * 1.6;
-    var continuesCaption = current.lineKind === "caption" && line.kind === "text";
+    var continuesCaption = current.lineKind === "caption";
     if (line.kind !== current.lineKind && !continuesCaption) return true;
     if (gap > size * 0.65) return true;
     if (Math.abs(line.size - prev.size) > size * 0.14) return true;
+    if (continuesCaption) return false;
     var bounds = ctx.bounds[line.col], colWidth = bounds[1] - bounds[0];
-    // first-line indent after a short line that ended a sentence = new paragraph
-    return line.kind === "text" && line.x0 > prev.x0 + line.size * 0.8 && prev.x1 < bounds[0] + colWidth * 0.9 && /[.!?:]$/.test(prev.text);
+    var first = line.runs[0];
+    // Run-in labels and unindented paragraphs need their own blocks too.
+    var runIn = first.font && first.font !== ctx.bodyFont && /^[A-Z][A-Za-z -]{2,55}[.:]$/.test(first.str.trim());
+    return line.kind === "text" && (runIn || (prev.x1 < bounds[0] + colWidth * 0.9 && /[.!?:]$/.test(prev.text)));
   }
   lines.forEach(function (line) {
     line.kind = lineKind(line, ctx);
@@ -291,13 +325,15 @@ function findRegions(pageInfo, ctx) {
     function above() {
       var barrier = others.filter(function (b) { return b.bottom <= caption.top + 1 && isBarrier(b, ctx.body); })
         .sort(function (a, b) { return b.bottom - a.bottom; })[0];
-      var top = barrier ? barrier.bottom + 2 : ctx.contentTop;
+      var edge = pageInfo.blocks.filter(function (b) { return b.kind === "furniture" && b.bottom < caption.top && b.top < pageInfo.height * 0.1; })
+        .reduce(function (top, b) { return Math.max(top, b.bottom + 4); }, pageInfo.height * 0.06);
+      var top = barrier ? barrier.bottom + 2 : Math.min(ctx.contentTop, edge);
       return caption.top - top > 24 ? [top, caption.bottom] : null;
     }
     function below() {
       var barrier = others.filter(function (b) { return b.top >= caption.bottom - 1 && isBarrier(b, ctx.body); })
         .sort(function (a, b) { return a.top - b.top; })[0];
-      var bottom = barrier ? barrier.top - 2 : ctx.contentBottom;
+      var bottom = barrier ? barrier.top - 2 : Math.max(ctx.contentBottom, pageInfo.height * 0.94);
       return bottom - caption.bottom > 24 ? [caption.top, bottom] : null;
     }
     var vertical = kind === "figure" ? above() || below() : below() || above();
@@ -309,7 +345,11 @@ function findRegions(pageInfo, ctx) {
       if (inside && b.kind !== "caption") b.kind = kind === "algorithm" ? "algorithm" : kind === "table" ? "table" : "figtext";
     });
     var label = m[2].replace(/^([A-Z])\.?(\d)/, "$1.$2");
+    var imageTop = rect.top, imageBottom = rect.bottom;
+    if (caption.top - rect.top > 24) imageBottom = caption.top - 6;
+    else if (rect.bottom - caption.bottom > 24) imageTop = caption.bottom + 6;
     regions.push({ kind: kind, label: label, page: pageInfo.number, caption: caption.text, captionKey: caption.key,
+      imageRect: ctx.toRect(rect.x0, imageTop, rect.x1, imageBottom),
       rect: ctx.toRect(rect.x0, rect.top, rect.x1, rect.bottom) });
   });
   return regions;
@@ -334,6 +374,9 @@ export function analyzeDocument(pages) {
       counts[key] = (counts[key] || 0) + 1;
     }
   });
+  var fonts = {};
+  all.forEach(function (line) { line.runs.forEach(function (run) { if (run.font && run.size >= body * 0.95) fonts[run.font] = (fonts[run.font] || 0) + run.str.length; }); });
+  var bodyFont = Object.keys(fonts).sort(function (a, b) { return fonts[b] - fonts[a]; })[0];
   var repeated = new Set(Object.keys(counts).filter(function (k) { return counts[k] >= 3; }));
   var doc = { body: body, pages: [], blocks: [], regions: [], equations: [], sections: [] };
   infos.forEach(function (info) {
@@ -343,7 +386,7 @@ export function analyzeDocument(pages) {
     if (!ordered.twoColumn) bounds.S = columnBounds(ordered.lines, "S", info.width);
     var content = ordered.lines.filter(function (l) { return l.top > info.height * 0.06 && l.bottom < info.height * 0.95; });
     var ctx = {
-      body: body, repeated: repeated, page: info, bounds: bounds,
+      body: body, bodyFont: bodyFont, repeated: repeated, page: info, bounds: bounds,
       marginLeft: Math.min.apply(null, content.map(function (l) { return l.x0; }).concat([info.width * 0.1])),
       marginRight: Math.max.apply(null, content.map(function (l) { return l.x1; }).concat([info.width * 0.9])),
       contentTop: content.length ? Math.min.apply(null, content.map(function (l) { return l.top; })) : 0,
@@ -368,7 +411,7 @@ export function analyzeDocument(pages) {
     });
     var pageInfo = { number: info.number, width: info.width, height: info.height, blocks: blocks, twoColumn: ordered.twoColumn, lines: ordered.lines };
     doc.regions.push.apply(doc.regions, findRegions(pageInfo, ctx));
-    groupEquations(blocks, body).forEach(function (eq) { eq.page = info.number; doc.equations.push(eq); });
+    groupEquations(blocks, body, info).forEach(function (eq) { eq.page = info.number; doc.equations.push(eq); });
     doc.pages.push(pageInfo);
     doc.blocks.push.apply(doc.blocks, blocks);
   });
@@ -380,7 +423,9 @@ export function analyzeDocument(pages) {
     if (b.translatable) {
       b.sentences = b.kind === "paragraph" || b.kind === "caption" ? splitSentences(b.text) : [b.text];
       // the key covers the sentence split too, so a better splitter never reuses a misaligned translation
+      var oldKey = b.key;
       b.key = b.page + ":" + hashText(b.sentences.map(compact).join("␞")).slice(0, 10);
+      if (b.kind === "caption") doc.regions.forEach(function (r) { if (r.captionKey === oldKey) r.captionKey = b.key; });
     }
   });
   doc.sections.forEach(function (sec) { sec.keys = doc.blocks.filter(function (b) { return b.sectionId === sec.id && b.kind !== "merged"; }).map(function (b) { return b.key; }); });
@@ -388,19 +433,27 @@ export function analyzeDocument(pages) {
 }
 
 // Display math often comes out as several fragments (numerator, denominator, number). Merge neighbours into one equation.
-function groupEquations(blocks, body) {
-  var eqs = blocks.filter(function (b) { return b.kind === "equation"; }).sort(function (a, b) { return a.top - b.top; });
+function groupEquations(blocks, body, page) {
+  var eqs = blocks.filter(function (b) { return b.kind === "equation"; }).sort(function (a, b) { return a.col.localeCompare(b.col) || a.top - b.top; });
   var groups = [];
   function numbered(b) { return b.lines.some(function (l) { var m = EQ_NUMBER.exec(l.text); return m && m[1] !== "0"; }); }
   eqs.forEach(function (b) {
     var last = groups[groups.length - 1];
-    if (last && b.top - last.bottom < body * 1.8 && b.x0 < last.x1 && b.x1 > last.x0 && !(last.numbered && numbered(b))) {
+    if (last && b.col === last.blocks[0].col && b.top - last.bottom < body * 1.8 && !(last.numbered && numbered(b))) {
       last.numbered = last.numbered || numbered(b);
       last.blocks.push(b);
       last.bottom = Math.max(last.bottom, b.bottom);
       last.x0 = Math.min(last.x0, b.x0);
       last.x1 = Math.max(last.x1, b.x1);
     } else groups.push({ blocks: [b], top: b.top, bottom: b.bottom, x0: b.x0, x1: b.x1, numbered: numbered(b) });
+  });
+  // Fractions and large operators can be isolated runs, not complete math lines.
+  blocks.filter(function (b) { return b.kind !== "equation" && b.lines.length <= 2 &&
+    /^(figtext|table|footnote)$/.test(b.kind) && !/[A-Za-z]{4,}/.test(b.text); }).forEach(function (b) {
+    var near = groups.filter(function (g) { return g.blocks[0].col === b.col &&
+      Math.max(0, g.top - b.bottom, b.top - g.bottom) < body * 0.9 && Math.abs((g.top + g.bottom - b.top - b.bottom) / 2) < body * 2; })
+      .sort(function (a, c) { return Math.abs(a.top - b.top) - Math.abs(c.top - b.top); })[0];
+    if (near) { near.blocks.push(b); near.top = Math.min(near.top, b.top); near.bottom = Math.max(near.bottom, b.bottom); }
   });
   return groups.map(function (g) {
     var number = null;
@@ -409,6 +462,7 @@ function groupEquations(blocks, body) {
     });
     var rect = [Math.min.apply(null, g.blocks.map(function (b) { return b.rect[0]; })), Math.min.apply(null, g.blocks.map(function (b) { return b.rect[1]; })),
       Math.max.apply(null, g.blocks.map(function (b) { return b.rect[2]; })), Math.max.apply(null, g.blocks.map(function (b) { return b.rect[3]; }))];
+    rect = [Math.max(0, rect[0] - 3 / page.width), Math.max(0, rect[1] - 3 / page.height), Math.min(1, rect[2] + 3 / page.width), Math.min(1, rect[3] + 3 / page.height)];
     return { number: number, text: g.blocks.map(function (b) { return b.text; }).join("\n"), rect: rect, key: g.blocks[0].key,
       size: g.blocks.reduce(function (n, b) { return n + b.text.length; }, 0) };
   }).filter(function (e) { return e.number || e.size >= 12; });
@@ -417,6 +471,58 @@ function groupEquations(blocks, body) {
 function sectionNumber(text) {
   var m = /^(\d{1,2})(?:\.\d+)*\.?\s/.exec(text);
   return m ? Number(m[1]) : null;
+}
+
+// Docling supplies semantic boundaries and reading order; PDF.js supplies rendering and text selection.
+export function analyzeDocling(pages, layout) {
+  var source = analyzeDocument(pages), doc = { body: source.body, pages: [], blocks: [], regions: [], equations: [], sections: [], engine: "docling" };
+  layout.pages.forEach(function (page) {
+    var info = { number: page.number, width: page.width, height: page.height, blocks: [], lines: source.pages[page.number - 1].lines };
+    var ordered = [], left = [], right = [];
+    function flush() { ordered.push(...left, ...right); left = []; right = []; }
+    page.blocks.slice().sort(function (a, b) { return a.rect[1] - b.rect[1] || a.rect[0] - b.rect[0]; }).forEach(function (item) {
+      if (item.rect[2] <= 0.56) left.push(item);
+      else if (item.rect[0] >= 0.44) right.push(item);
+      else { flush(); ordered.push(item); }
+    });
+    flush();
+    ordered.forEach(function (item) {
+      var r = item.rect, text = item.text;
+      var lines = info.lines.filter(function (line) { var x = (line.x0 + line.x1) / (2 * info.width), y = (line.top + line.bottom) / (2 * info.height); return x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3]; });
+      if (text === null) text = lines.map(function (line) { return line.text; }).join(" ");
+      var block = { text: text || "", kind: item.kind, page: page.number, rect: r, parts: [{ page: page.number, rect: r }], lines: lines,
+        semantic: true, sourceRef: item.ref, captions: item.captions, col: r[2] <= 0.55 ? "L" : r[0] >= 0.45 ? "R" : "F",
+        x0: r[0] * info.width, x1: r[2] * info.width, top: r[1] * info.height, bottom: r[3] * info.height,
+        size: lines.length ? median(lines.map(function (line) { return line.size; })) : doc.body };
+      block.key = block.page + ":" + hashText(compact(block.text)).slice(0, 10);
+      info.blocks.push(block); doc.blocks.push(block);
+    });
+    doc.pages.push(info);
+  });
+  markFrontMatter(doc);
+  buildSections(doc);
+  doc.blocks.forEach(function (block) {
+    block.translatable = /^(paragraph|heading|caption|title)$/.test(block.kind) && !block.reference && !!block.text.trim();
+    block.sentences = /^(paragraph|caption)$/.test(block.kind) ? splitSentences(block.text) : [block.text];
+    block.key = block.page + ":" + hashText(block.sentences.map(compact).join("␞")).slice(0, 10);
+    if (block.kind === "equation") {
+      var numbers = block.text.match(/\(\s*(\d{1,3}[a-z]?|[A-Z]\.\d{1,3})\s*\)/g);
+      var number = numbers && EQ_NUMBER.exec(numbers[numbers.length - 1]);
+      doc.equations.push({ page: block.page, number: number ? number[1] : null, text: block.text, rect: block.rect, key: block.key });
+    }
+  });
+  doc.pages.forEach(function (page) {
+    page.blocks.filter(function (b) { return b.kind === "figure" || b.kind === "table"; }).forEach(function (block) {
+      var caption = page.blocks.find(function (b) { return b.kind === "caption" && block.captions.includes(b.sourceRef); });
+      if (!caption) return;
+      var label = CAPTION.exec(caption.text);
+      if (!label) return;
+      doc.regions.push({ kind: block.kind, page: page.number, label: label[2], caption: caption.text, captionKey: caption.key,
+        imageRect: block.rect, rect: [Math.min(block.rect[0], caption.rect[0]), Math.min(block.rect[1], caption.rect[1]), Math.max(block.rect[2], caption.rect[2]), Math.max(block.rect[3], caption.rect[3])] });
+    });
+  });
+  doc.sections.forEach(function (section) { section.keys = doc.blocks.filter(function (b) { return b.sectionId === section.id; }).map(function (b) { return b.key; }); });
+  return doc;
 }
 
 // A paragraph cut by a column or page break continues in the next paragraph block: join them so sentences stay whole.

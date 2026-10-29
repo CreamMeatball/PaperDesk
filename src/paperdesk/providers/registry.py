@@ -5,10 +5,8 @@ from typing import Iterable
 from ..domain.errors import NotFound
 from ..ports.ai import AIProvider, ProviderContext
 from .anthropic_api import AnthropicApiProvider
-from .chatgpt_plan import ChatGPTPlanProvider
 from .claude_code import ClaudeCodeProvider
 from .codex_cli import CodexCliProvider
-from .demo import DemoProvider
 from .openai_api import OpenAIApiProvider
 from .openai_compatible import OllamaProvider, OpenAICompatibleServerProvider
 from ..i18n import _
@@ -48,11 +46,9 @@ def default_registry() -> ProviderRegistry:
     return ProviderRegistry([
         CodexCliProvider,
         ClaudeCodeProvider,
-        ChatGPTPlanProvider,
         OpenAIApiProvider,
         AnthropicApiProvider,
         OllamaProvider,
         OpenAICompatibleServerProvider,
-        DemoProvider,
     ])
 

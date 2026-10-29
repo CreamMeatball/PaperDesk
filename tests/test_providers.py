@@ -101,7 +101,8 @@ class CliProviderTests(unittest.TestCase):
         provider = ClaudeCodeProvider(context("claude-code", runner=FakeRunner(CommandResult(1, payload, ""))), which=found("/bin/claude"))
         with self.assertRaises(ProviderFailed) as caught:
             provider.complete(PROMPT)
-        self.assertIn("OAuth session expired", str(caught.exception))
+        self.assertEqual(caught.exception.code, 'auth_required')
+        self.assertIn("다시 로그인", str(caught.exception))
 
     def test_missing_cli_is_unavailable(self):
         provider = CodexCliProvider(context("codex-cli", {"binary": "/definitely/missing"}), which=found(None))

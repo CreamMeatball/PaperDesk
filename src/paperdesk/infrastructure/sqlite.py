@@ -104,6 +104,22 @@ MIGRATIONS: tuple[str, ...] = (
         value TEXT NOT NULL
     );
     """,
+    """
+    CREATE TABLE translation_jobs (
+        id TEXT PRIMARY KEY,
+        doc_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+        fingerprint TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        state TEXT NOT NULL,
+        completed INTEGER NOT NULL DEFAULT 0,
+        total INTEGER NOT NULL,
+        error TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX translation_jobs_active ON translation_jobs(doc_id, fingerprint)
+        WHERE state IN ('queued', 'running', 'paused');
+    """,
 )
 
 
@@ -156,10 +172,11 @@ class SqliteDocumentRepository(DocumentRepository):
     def __init__(self, database: Database) -> None:
         self._db = database
 
-    def add(self, document: Document) -> None:
+    def add(self, document: Document) -> Document:
         values = document.to_dict()
         with self._db.connect() as db:
-            db.execute(f"INSERT INTO documents ({_DOC_COLUMNS}) VALUES ({', '.join(':' + c.strip() for c in _DOC_COLUMNS.split(','))})", values)
+            db.execute(f"INSERT INTO documents ({_DOC_COLUMNS}) VALUES ({', '.join(':' + c.strip() for c in _DOC_COLUMNS.split(','))}) ON CONFLICT(sha256) DO NOTHING", values)
+            return _document(db.execute(f"SELECT {_DOC_COLUMNS} FROM documents WHERE sha256=?", (document.sha256,)).fetchone())
 
     def get(self, doc_id: str) -> Document | None:
         with self._db.connect() as db:

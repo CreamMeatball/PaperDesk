@@ -69,8 +69,8 @@ class ServerLanguageTests(unittest.TestCase):
 
     def test_settings_texts_and_ui_language_setting(self):
         _, view = self.get("/api/settings", "ja")
-        demo = next(p for p in view["providers"] if p["id"] == "demo")
-        self.assertEqual(demo["label"], "体験モード（AIなし）")
+        codex = next(p for p in view["providers"] if p["id"] == "codex-cli")
+        self.assertEqual(codex["options"][0]["label"], "モデル")
         openai = next(p for p in view["providers"] if p["id"] == "openai-api")
         self.assertEqual(openai["options"][1]["label"], "APIキー")
         status, view = self.get("/api/settings", "en", "PUT", {"ui_language": "zh"})

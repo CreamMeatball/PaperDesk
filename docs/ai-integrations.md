@@ -12,7 +12,7 @@ Paperdesk는 사용자가 이미 가진 AI 접근 수단을 연결한다. 원칙
 - **Sign in with ChatGPT – ChatGPT plan usage (프리뷰)**: 오픈소스·로컬 앱이 사용자의 ChatGPT 요금제로 Responses API를 호출하는 공식 경로.
   `dynamic_agent_client`로 동적 등록, 호스트별 `ext_agent_host_id` 저장, PKCE + 루프백 콜백, `store:false`·`stream:true` 필수.
   유료·원격 호스팅 앱은 별도 신청이 필요하다. UI 지침: “Continue with ChatGPT” 버튼, 첫 로그인 안내, “Using ChatGPT plan” 표시, Manage usage 링크.
-  현재 구현: 추론(`ChatGPTPlanProvider` + `ResponsesClient`)까지. 남은 일: 로그인 흐름과 토큰 갱신.
+  현재 배포 앱에서는 제외한다. 로그인 흐름과 토큰 갱신이 미완성이며, 추론 실험 코드는 `experiments/chatgpt_plan.py`에 보관한다. ChatGPT 요금제를 연결하려면 현재 지원되는 Codex CLI를 사용한다.
   - https://developers.openai.com/siwc/token-sharing-open-source
   - https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations
   - https://developers.openai.com/siwc/ui-ux-guidelines

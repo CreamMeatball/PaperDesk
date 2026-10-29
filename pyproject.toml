@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,12 +7,15 @@ name = "paperdesk"
 dynamic = ["version"]
 description = "Local PDF paper reader with pluggable AI assistants (Codex, Claude, OpenAI, Ollama, vLLM)"
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"]
 requires-python = ">=3.10"
 dependencies = []
 
 [project.optional-dependencies]
 # Native macOS window (WKWebView). Without it, Paperdesk opens in the default browser.
 native = ["pywebview>=5.3"]
+analysis = ["docling-slim[standard]==2.142.1"]
 mac-build = ["pywebview>=5.3", "pyinstaller>=6.12,<7"]
 
 [project.scripts]

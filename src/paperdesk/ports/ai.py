@@ -34,6 +34,12 @@ class CommandRunner(ABC):
     @abstractmethod
     def run(self, argv: list[str], *, input_text: str, cwd: Path, timeout: float) -> "CommandResult": ...
 
+    def codex_models(self, executable: str) -> list[str]:
+        return []
+
+    def close(self) -> None:
+        pass
+
 
 @dataclass(frozen=True)
 class CommandResult:
@@ -102,6 +108,13 @@ class AIProvider(ABC):
     @property
     def model(self) -> str:
         return self.option("model") if any(o.key == "model" for o in self.options) else ""
+
+    def available_models(self) -> list[str]:
+        return list(self.status().models)
+
+    def resolve_model(self) -> str:
+        """Resolve an implicit model before persisting a request."""
+        return self.model
 
     @abstractmethod
     def status(self) -> ProviderStatus:

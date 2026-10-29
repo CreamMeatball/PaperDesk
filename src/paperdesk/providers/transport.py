@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import subprocess
+import tempfile
+import time
+import signal
+import threading
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -15,24 +20,127 @@ from ..domain.errors import ProviderFailed, ProviderUnavailable
 from ..ports.ai import CommandResult, CommandRunner, HttpClient
 from ..i18n import _
 
+WINDOWS = os.name == "nt"
+# cmd.exe re-parses the arguments of .cmd/.bat shims (npm installs CLIs that way); these characters could change the command.
+_CMD_SPECIAL = set('"%!^&|<>()\r\n')
+
+
+def _spawn_options() -> dict:
+    """Run CLIs in their own process group (so stopping one also stops what it started), without a console window."""
+    if WINDOWS:
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW}
+    return {"start_new_session": True}
+
+
+def _stop(process: subprocess.Popen, force: bool = False) -> None:
+    if process.poll() is not None:
+        return
+    try:
+        if WINDOWS:
+            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True,
+                           creationflags=subprocess.CREATE_NO_WINDOW, timeout=10)
+        else:
+            os.killpg(process.pid, signal.SIGKILL if force else signal.SIGTERM)
+    except (ProcessLookupError, subprocess.TimeoutExpired):
+        pass
+
+
+def unsafe_for_cmd(argv: list[str]) -> bool:
+    return argv[0].lower().endswith((".cmd", ".bat")) and any(_CMD_SPECIAL & set(arg) for arg in argv[1:])
+
 
 class SubprocessRunner(CommandRunner):
+    def __init__(self) -> None:
+        self._processes = set()
+        self._lock = threading.Lock()
+        self._closed = False
+
+    def close(self) -> None:
+        with self._lock:
+            self._closed = True
+            for process in self._processes:
+                _stop(process)
+
+    def codex_models(self, executable: str) -> list[str]:
+        # Official app-server RPC; keep stdin open until the response arrives. Never read auth files.
+        with tempfile.TemporaryDirectory(prefix='paperdesk-models-') as folder:
+            with self._lock:
+                if self._closed:
+                    return []
+                process = subprocess.Popen([executable, 'app-server', '--stdio'], stdin=subprocess.PIPE,
+                                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, cwd=folder,
+                                           text=True, encoding='utf-8', errors='replace', **_spawn_options())
+                self._processes.add(process)
+            # A reader thread instead of selectors: Windows cannot select() on pipes.
+            lines = queue.Queue()
+            def read():
+                for line in iter(process.stdout.readline, ''):
+                    lines.put(line)
+                lines.put('')
+            reader = threading.Thread(target=read, daemon=True)
+            reader.start()
+            def send(value):
+                process.stdin.write(json.dumps(value) + '\n')
+                process.stdin.flush()
+            try:
+                send({'id': 1, 'method': 'initialize', 'params': {
+                    'clientInfo': {'name': 'paperdesk', 'version': __version__}}})
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline:
+                    try:
+                        line = lines.get(timeout=max(0, deadline-time.monotonic()))
+                    except queue.Empty:
+                        break
+                    if not line:
+                        break
+                    value = json.loads(line)
+                    if value.get('id') == 1:
+                        send({'method': 'initialized', 'params': {}})
+                        send({'id': 2, 'method': 'model/list', 'params': {'includeHidden': False}})
+                    elif value.get('id') == 2:
+                        return [str(m['model']) for m in value.get('result', {}).get('data', [])
+                                if m.get('model') and not m.get('hidden', False)]
+            finally:
+                _stop(process)
+                try:
+                    process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    _stop(process, force=True)
+                    process.wait()
+                reader.join(timeout=1)
+                for stream in (process.stdin, process.stdout):
+                    try:
+                        stream.close()
+                    except OSError:
+                        pass
+                with self._lock:
+                    self._processes.discard(process)
+        return []
+
     def run(self, argv: list[str], *, input_text: str, cwd: Path, timeout: float) -> CommandResult:
+        process = None
         try:
-            done = subprocess.run(
-                argv,
-                input=input_text,
-                capture_output=True,
-                text=True,
-                cwd=cwd,
-                timeout=timeout,
-                env=dict(os.environ, NO_COLOR="1"),
-            )
+            with self._lock:
+                if self._closed:
+                    raise ProviderUnavailable(_("앱을 종료하는 중이에요."))
+                if unsafe_for_cmd(argv):
+                    raise ProviderUnavailable(_("{name}가 .cmd 실행 파일이라 안전하게 실행할 수 없어요. 설정에서 .exe 실행 파일 경로를 지정해 주세요.",
+                                                name=Path(argv[0]).name))
+                process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           text=True, encoding='utf-8', errors='replace', cwd=cwd,
+                                           env=dict(os.environ, NO_COLOR='1'), **_spawn_options())
+                self._processes.add(process)
+            stdout, stderr = process.communicate(input_text, timeout=timeout)
         except subprocess.TimeoutExpired as error:
+            _stop(process, force=True)
+            process.communicate()
             raise ProviderFailed(_("{seconds}초 안에 응답이 오지 않았어요.", seconds=f"{timeout:.0f}")) from error
         except OSError as error:
             raise ProviderUnavailable(_("실행하지 못했어요: {error}", error=str(error))) from error
-        return CommandResult(done.returncode, done.stdout, done.stderr)
+        finally:
+            with self._lock:
+                self._processes.discard(process)
+        return CommandResult(process.returncode, stdout, stderr)
 
 
 def _error_text(raw: str) -> str:

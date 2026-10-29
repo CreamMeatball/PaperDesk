@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..domain.errors import ProviderFailed
 from ..domain.models import Prompt
 from ..ports.ai import CommandResult, OptionField
 from .cli import CliProvider, binary_option
@@ -30,6 +29,11 @@ class ClaudeCodeProvider(CliProvider):
         binary_option("claude"),
     )
 
+    def available_models(self) -> list[str]:
+        # Official CLI aliases resolve to the account's supported versions.
+        # https://code.claude.com/docs/en/model-config#model-aliases
+        return ["sonnet", "opus", "haiku"]
+
     def interpret_login(self, result: CommandResult) -> tuple[bool, str]:
         try:
             data = json.loads(result.stdout)
@@ -38,13 +42,6 @@ class ClaudeCodeProvider(CliProvider):
         if data.get("loggedIn"):
             return True, _("로그인됨 ({method})", method=data.get('authMethod', ''))
         return False, _("Claude Code에 로그인되어 있지 않아요. 터미널에서 'claude'를 실행해 /login 하세요.")
-
-    def failure_message(self, result: CommandResult) -> str:
-        try:
-            data = json.loads(result.stdout)
-        except ValueError:
-            return super().failure_message(result)
-        return _("Claude Code 오류: {detail}", detail=data.get('result') or data.get('subtype') or result.returncode)
 
     def build_command(self, path: str, prompt: Prompt, workdir: Path) -> list[str]:
         argv = [
@@ -67,6 +64,6 @@ class ClaudeCodeProvider(CliProvider):
         except ValueError:
             return result.stdout
         if data.get("is_error"):
-            raise ProviderFailed(_("Claude Code 오류: {detail}", detail=data.get('result') or data.get('subtype')))
+            raise self.failure(result)
         return str(data.get("result") or "")
 
