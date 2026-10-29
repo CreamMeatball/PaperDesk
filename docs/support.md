@@ -1,6 +1,6 @@
 # Supported beta scope
 
-The first distribution target is Apple Silicon (arm64), macOS 15 or later. The bundle enforces that minimum. macOS 27.0.1 is the development machine verified so far; macOS 15 and a clean second Mac must pass the release checklist before public distribution. Intel and Windows are not supported by this beta. Linux is a development shell.
+The first distribution target is Apple Silicon (arm64), macOS 15 or later. The bundle enforces that minimum. macOS 27.0.1 is the development machine verified so far; macOS 15 and a clean second Mac must pass the release checklist before public distribution. Intel Macs are not supported by this beta. Windows 10/11 x64 is available as a source install (`scripts/install_source.py` with Python 3.12 from python.org); a signed Windows installer is not available yet because Smart App Control blocks unsigned programs. Linux is a development shell.
 
 PDF limits: 200 MB per file, 500 pages, page dimensions at most 14,400 PDF points, bounded rendering canvases and image decoding. Text PDFs, including multiple columns, are the supported reading/translation input. Scanned pages can be displayed but have no OCR or selectable text. Password-protected PDFs are not supported. Corrupt files display an error. Large, mixed-layout and multilingual PDFs still require the native interaction checks below.
 

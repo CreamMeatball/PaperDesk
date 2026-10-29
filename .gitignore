@@ -6,3 +6,7 @@ dist/
 .venv/
 /var/
 test-results/
+
+# Local agent notes with personal paths: kept in the working folder, never published.
+AGENTS.md
+PROJECT_CONTEXT.md

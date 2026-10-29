@@ -1,6 +1,7 @@
 """Windows adapters. The pure parts run everywhere; tests that call Windows APIs run only on Windows."""
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -94,6 +95,30 @@ class ProcessTests(unittest.TestCase):
             self.assertFalse(_alive(pid))
 
 
+class Utf8StdioTests(unittest.TestCase):
+    def test_mcp_speaks_utf8_over_pipes_whatever_the_system_code_page(self):
+        # Korean Windows pipes default to cp949, which has neither these characters nor UTF-8 framing.
+        app, tmp = build_app()
+        self.addCleanup(tmp.cleanup)
+        doc, _ = app.library.import_pdf('paper.pdf', make_pdf(['Body text']))
+        title = '주의 집중 📄 — Attention ✓'
+        app.library.rename(doc.id, title)
+        env = {k: v for k, v in os.environ.items() if k not in ('PYTHONUTF8', 'PYTHONIOENCODING')}
+        env.update(PAPERDESK_HOME=str(app.paths.root), PYTHONPATH=str(Path(__file__).resolve().parents[1]/'src'))
+        messages = [
+            {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {'protocolVersion': '2025-06-18', 'capabilities': {},
+                                                                           'clientInfo': {'name': '클라이언트 ✓', 'version': '1'}}},
+            {'jsonrpc': '2.0', 'method': 'notifications/initialized'},
+            {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call', 'params': {'name': 'search_papers', 'arguments': {'query': '집중 📄'}}},
+            {'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call', 'params': {'name': 'list_papers', 'arguments': {}}},
+        ]
+        done = subprocess.run([sys.executable, '-m', 'paperdesk', 'mcp'], capture_output=True, env=env, timeout=120,
+                              input=''.join(json.dumps(m, ensure_ascii=False) + '\n' for m in messages).encode('utf-8'))
+        replies = {r.get('id'): r for r in (json.loads(line) for line in done.stdout.decode('utf-8').splitlines() if line.strip())}
+        self.assertEqual(sorted(k for k in replies if k), [1, 2, 3], done.stderr.decode('utf-8', 'replace')[-800:])
+        self.assertIn(title, replies[3]['result']['content'][0]['text'])
+
+
 def _alive(pid):
     import ctypes
     kernel32 = ctypes.WinDLL('kernel32')
@@ -140,6 +165,39 @@ class PortableBackupTests(unittest.TestCase):
         checked = app.archives.prepare(archive)
         staged = json.loads((app.paths.root/'restore-staging'/checked['token']/'settings.json').read_text(encoding='utf-8'))
         self.assertEqual(staged['provider_options']['codex-cli']['binary'], str(folder/'codex'))
+
+
+class InstalledLayoutTests(unittest.TestCase):
+    """Paths inside the installed Windows app folder (%LOCALAPPDATA%\\Programs\\Paperdesk)."""
+
+    def frozen(self, folder):
+        return mock.patch.multiple(sys, create=True, frozen=True, platform='win32', executable=str(Path(folder)/'Paperdesk.exe'))
+
+    def test_mcp_command_uses_the_console_executable(self):
+        from paperdesk import cli as commands
+        with tempfile.TemporaryDirectory() as folder, self.frozen(folder):
+            command, arguments = commands._launcher()
+        self.assertEqual((Path(command).name, arguments), ('paperdesk-cli.exe', ['mcp']))
+
+    def test_source_install_mcp_command_uses_the_signed_console_python(self):
+        from paperdesk import cli as commands
+        with tempfile.TemporaryDirectory() as folder, \
+                mock.patch.multiple(sys, create=True, frozen=False, platform='win32', executable=str(Path(folder)/'pythonw.exe')):
+            command, arguments = commands._launcher()
+        self.assertEqual((Path(command).name, arguments), ('python.exe', ['-m', 'paperdesk', 'mcp']))
+
+    def test_build_manifest_and_analysis_runtime_sit_beside_the_executables(self):
+        from paperdesk.services import layout
+        from paperdesk.services.diagnostics import diagnostic_report
+        app, tmp = build_app()
+        self.addCleanup(tmp.cleanup)
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder)/'build-manifest.json').write_text(json.dumps({'build': 7, 'source_tree_sha256': 'abc'}), encoding='utf-8')
+            with self.frozen(folder), mock.patch.object(layout, 'WINDOWS', True):
+                report = diagnostic_report(app.paths)
+                python = app.analysis._python()
+        self.assertEqual((report['build'], report['source_tree_sha256']), (7, 'abc'))
+        self.assertEqual(python, Path(folder)/'analysis-runtime'/'python.exe')
 
 
 @unittest.skipUnless(WINDOWS, 'Windows Credential Manager')

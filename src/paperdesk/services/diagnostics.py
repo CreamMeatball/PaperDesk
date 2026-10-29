@@ -18,8 +18,10 @@ def diagnostic_report(paths) -> dict:
             'includes': ['versions', 'architecture', 'schema'],
             'excludes': ['papers', 'filenames', 'paths', 'prompts', 'conversations', 'settings', 'credentials', 'logs']}
     if getattr(sys, 'frozen', False):
+        # Windows: beside Paperdesk.exe; macOS: Paperdesk.app/Contents/Resources.
+        manifest = (Path(sys.executable).parent if sys.platform == 'win32' else Path(sys.executable).parents[1]/'Resources')/'build-manifest.json'
         try:
-            build = json.loads((Path(sys.executable).parents[1]/'Resources/build-manifest.json').read_text(encoding='utf-8'))
+            build = json.loads(manifest.read_text(encoding='utf-8'))
             report['build'] = build.get('build')
             report['source_tree_sha256'] = build.get('source_tree_sha256')
         except (OSError, ValueError):

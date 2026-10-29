@@ -1,0 +1,11 @@
+# Python 3.12; macOS arm64. Native window (pywebview + WKWebView) for source installs: scripts/install_source.py
+bottle==0.13.4
+proxy_tools==0.1.0
+pyobjc-core==12.2.2
+pyobjc-framework-Cocoa==12.2.2
+pyobjc-framework-Quartz==12.2.2
+pyobjc-framework-security==12.2.2
+pyobjc-framework-UniformTypeIdentifiers==12.2.2
+pyobjc-framework-WebKit==12.2.2
+pywebview==6.2.1
+typing_extensions==4.16.0

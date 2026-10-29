@@ -100,7 +100,12 @@ def command_mcp(args: argparse.Namespace) -> int:
 
 def _launcher() -> tuple[str, list[str]]:
     if getattr(sys, "frozen", False):
+        if sys.platform == "win32":  # Paperdesk.exe is a windowed program without stdio; MCP needs the console twin.
+            return str(Path(sys.executable).with_name("paperdesk-cli.exe")), ["mcp"]
         return sys.executable, ["mcp"]
+    if sys.platform == "win32":
+        # Source install: the signed python.exe (pythonw.exe has no stdio; pip's paperdesk.exe shim is unsigned).
+        return str(Path(sys.executable).with_name("python.exe")), ["-m", APP_ID, "mcp"]
     script = shutil.which(APP_ID)
     if script:
         return str(Path(script).resolve()), ["mcp"]
@@ -203,7 +208,16 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _utf8_stdio() -> None:
+    """MCP messages and command output are UTF-8 everywhere. Windows pipes otherwise use the ANSI code page
+    (cp949 on Korean Windows), which garbles titles for MCP clients and cannot encode many characters."""
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):  # None in the windowed Paperdesk.exe
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def main(argv: list[str] | None = None) -> int:
+    _utf8_stdio()
     parser = build_parser()
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING, stream=sys.stderr)

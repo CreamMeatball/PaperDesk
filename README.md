@@ -1,6 +1,6 @@
 # Paperdesk
 
-내 Mac에서 논문 PDF를 주제별 폴더로 정리하고, 읽다가 막히는 부분을 바로 번역·설명·질문하는 데스크톱 앱입니다.
+내 컴퓨터(macOS·Windows)에서 논문 PDF를 주제별 폴더로 정리하고, 읽다가 막히는 부분을 바로 번역·설명·질문하는 데스크톱 앱입니다.
 AI는 이미 쓰고 있는 것을 연결합니다: Codex·Claude Code 로그인, OpenAI·Claude API 키, 내 컴퓨터의 Ollama, 회사·학교의 vLLM 서버.
 논문과 설정은 모두 내 컴퓨터에만 저장됩니다.
 
@@ -10,14 +10,14 @@ AI는 이미 쓰고 있는 것을 연결합니다: Codex·Claude Code 로그인,
 
 Paperdesk는 설치한 컴퓨터에서 실행됩니다. `paperdesk`를 실행하면 앱 내부 통신용 `127.0.0.1` 프로세스와 네이티브 창이 함께 시작되고, 창을 닫으면 종료됩니다. 별도의 서버 운영이나 원격 서버 접속이 필요하지 않습니다. 화면 라이브러리와 언어 파일도 앱 패키지에 포함됩니다.
 
-macOS 데이터 폴더는 `~/Library/Application Support/Paperdesk`입니다. 앱 업데이트 때 기록을 유지하도록 실행 파일과 사용자 데이터를 분리합니다.
+데이터 폴더는 macOS `~/Library/Application Support/Paperdesk`, Windows `%LOCALAPPDATA%\Paperdesk`입니다. 앱 업데이트 때 기록을 유지하도록 실행 파일과 사용자 데이터를 분리합니다.
 
 | 저장 항목 | 위치 |
 | --- | --- |
 | PDF 원본 | `files/` |
 | 서재·폴더·번역·하이라이트·메모·AI 대화·화면 설정 | `library.sqlite3` |
 | AI 연결 설정·화면 언어·답변 언어 | `settings.json` |
-| API 키 | macOS 키체인 |
+| API 키 | macOS 키체인 / Windows 자격 증명 관리자 |
 
 앱을 다시 열거나 내부 실행 포트가 바뀌어도 기록을 불러옵니다. 예전 버전의 브라우저 저장소에 있던 대화와 화면 설정은 같은 실행 주소에서 업데이트를 처음 열 때 앱 DB로 옮깁니다. 성공한 항목만 예전 저장소에서 지우며, 이미 DB에 있는 최신 기록이나 사용자가 비운 대화를 덮어쓰지 않습니다. 논문별 대화는 최근 80개까지 저장합니다.
 
@@ -41,6 +41,34 @@ brew tap OWNER/paperdesk https://github.com/OWNER/homebrew-paperdesk
 brew install paperdesk
 paperdesk            # 앱 창 열기
 ```
+
+## 소스로 설치 (베타, macOS·Windows)
+
+서명된 설치 파일이 나오기 전까지는 이 저장소에서 직접 설치합니다. 설치 스크립트가 별도 Python 환경을 만들고 배포 빌드와 같은 고정 버전(네이티브 창, Docling 분석, 약 1.3GB)을 설치합니다. 서재는 데이터 폴더에 따로 있어 업데이트·제거해도 유지됩니다.
+
+**Windows 10/11 (x64)**
+
+1. [python.org](https://www.python.org/downloads/windows/)의 Python 3.12를 설치합니다(`winget install Python.Python.3.12`). uv·conda가 설치한 Python은 서명이 없어 아래 Smart App Control에 막힐 수 있습니다.
+2. 저장소를 받습니다(`git clone` 또는 ZIP).
+3. 저장소 폴더에서 설치합니다. 시작 메뉴에 **Paperdesk (beta)**가 생깁니다.
+
+```bat
+py -3.12 scripts\install_source.py
+```
+
+**macOS (Apple Silicon)**
+
+```sh
+brew install python@3.12
+python3.12 scripts/install_source.py
+~/.paperdesk-beta/venv/bin/python -m paperdesk     # 앱 창 열기
+```
+
+- 업데이트: `git pull` 후 설치 명령을 다시 실행합니다(자동 업데이트 없음).
+- 제거: 설치 명령에 `--uninstall`을 붙입니다.
+- Claude 데스크톱·Codex 연결: 설치가 끝나면 표시되는 `... -m paperdesk mcp-config claude`(또는 `codex`) 결과를 각 앱 설정에 넣습니다.
+
+> **Windows Smart App Control**: Windows 11에서 이 기능이 켜져 있으면 서명이 없는 프로그램은 직접 빌드한 것이라도 "그래도 실행" 없이 차단됩니다(SmartScreen 경고와 다릅니다). 소스 설치는 서명된 python.org `python.exe`로 실행되므로 동작합니다. 함께 설치되는 라이브러리의 DLL은 Microsoft 평판으로 판정되어, 처음 한 번 막혔다가 다시 시도하면 통과하는 경우가 있습니다. 논문 분석이 실패하면 리더에서 다시 시도해 주세요. 막힌 파일은 이벤트 뷰어의 `Microsoft-Windows-CodeIntegrity/Operational`(이벤트 3077)에서 확인할 수 있습니다.
 
 ## 주요 기능
 
@@ -83,7 +111,7 @@ flowchart LR
 - `domain`: 데이터 모델과 오류. 디스크·네트워크를 모릅니다.
 - `ports`: 서비스가 의존하는 인터페이스(`AIProvider`, `DocumentRepository`, `SecretStore` …).
 - `providers`: AI 연결. 새 연결은 `AIProvider`를 상속해 `options`를 선언하고 `registry.py`에 등록하면 설정 화면이 자동으로 만들어집니다.
-- `platforms`: 운영체제별 차이(데이터 폴더, 키 저장소, 창 효과). Windows 지원은 `WindowsPlatform`을 채우면 됩니다.
+- `platforms`: 운영체제별 차이(데이터 폴더, 키 저장소, 창 효과, 첫 실행 언어). 공통 화면·서버·DB·백업 형식은 OS별로 나누지 않습니다.
 - `desktop`: 창 띄우기(`NativeWindowShell` = pywebview, 개발용 `BrowserShell`).
 
 ## 개발
@@ -119,6 +147,10 @@ python3 scripts/i18n.py missing ja     # 번역이 필요한 문구 출력
 `scripts/build_macos.py`는 앱·아이콘·Sparkle을 묶고 서명·공증·DMG 생성을 수행합니다. `scripts/release_macos.py`는 최종 DMG로 서명된 업데이트 피드와 Homebrew Cask를 준비합니다. 빌드 번호는 매번 증가시키며 사용자 데이터는 앱과 별도 보관합니다. DB 스키마 변경 전에는 `backups/migrations/`에 자동 백업하고, 마이그레이션 실패는 롤백합니다.
 
 Mac 준비, 키 설정, 빌드·배포 명령과 검증 범위는 [docs/macos-updates.md](docs/macos-updates.md)에 있습니다. 스크립트는 로컬 파일만 준비하며 GitHub 릴리스·업데이트 피드·Homebrew 저장소에 자동 게시하지 않습니다.
+
+### Windows 설치 파일
+
+`scripts/build_windows.py --development`가 PyInstaller로 `Paperdesk.exe`(창)·`paperdesk-cli.exe`(콘솔: MCP·doctor·backup)와 Docling 분석 런타임(`scripts/build_analysis_runtime.py`)을 묶고, Inno Setup(`packaging/windows/paperdesk.iss`)으로 관리자 권한이 필요 없는 사용자 설치 파일을 만듭니다(`%LOCALAPPDATA%\Programs\Paperdesk`, WebView2가 없을 때만 설치 중 내려받기). 고정 버전은 `requirements/windows-build.lock`과 `requirements/docling-windows.lock`(macOS와 같은 Docling 버전)입니다. Smart App Control 때문에 공개 배포 전에는 모든 실행 파일·DLL과 설치 파일의 Authenticode 서명이 필요하며, 서명과 WinSparkle 업데이트는 아직 연결하지 않았습니다.
 
 ### 소스/CLI Formula
 
