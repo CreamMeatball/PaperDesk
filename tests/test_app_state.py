@@ -39,6 +39,15 @@ class AppStateTests(unittest.TestCase):
             with self.assertRaises(InvalidInput):
                 self.app.preferences.update(bad)
 
+    def test_pane_widths_persist_within_bounds(self):
+        self.assertEqual((self.app.preferences.all()["sidebar_width"], self.app.preferences.all()["assistant_width"]), (252, 380))
+        self.app.preferences.update({"sidebar_width": 320, "assistant_width": 520})
+        reopened = self.reopen().preferences.all()
+        self.assertEqual((reopened["sidebar_width"], reopened["assistant_width"]), (320, 520))
+        for bad in ({"sidebar_width": 199}, {"sidebar_width": 421}, {"assistant_width": 641}, {"sidebar_width": True}, {"assistant_width": "400"}):
+            with self.assertRaises(InvalidInput):
+                self.app.preferences.update(bad)
+
     def test_conversation_is_kept_per_paper_and_deleted_with_it(self):
         turns = [{"task": "ask", "question": f"q{i}", "answer": "a"} for i in range(100)]
         self.app.conversations.save(self.doc.id, turns)

@@ -49,12 +49,23 @@ def command_open(args: argparse.Namespace) -> int:
     from .desktop import choose_shell
     from .web.server import create_server
 
+    from .infrastructure.source_update import SourceInstall, SourceUpdates
+
     if _running_instance(args.port):
         from .domain.errors import InvalidInput
         from .i18n import _
         raise InvalidInput(_("이 서재를 사용하는 앱이 이미 실행 중이에요. 먼저 앱을 종료해 주세요."))
+    # Source installs: commits fetched during the last run (automatically or from Settings) are applied now,
+    # before any window or server exists. The automatic setting only controls fetching.
+    source = SourceInstall.current()
+    if source is not None and source.git is not None and source.apply():
+        return RELAUNCH  # main() starts the new version after it releases the library lock
     with _application(restore=True) as app:
-        shell = choose_shell(args.shell, app.platform, app.paths.webview_storage, app.updates)
+        if source is not None:
+            app.updates.attach(SourceUpdates(source))
+            if source.auto_update:
+                threading.Thread(target=source.fetch, name="paperdesk-source-fetch", daemon=True).start()
+        shell = choose_shell(args.shell, app.platform, app.platform.webview_storage(app.paths.root), app.updates)
         try:
             server = create_server(app, "127.0.0.1", args.port)
         except OSError:
@@ -73,6 +84,20 @@ def command_open(args: argparse.Namespace) -> int:
             server.shutdown()
             server.server_close()
         return 0
+
+
+RELAUNCH = -1  # command_open: an update was applied; restart once this process no longer holds the library lock
+
+
+def _relaunch() -> int:
+    """Start the updated version. Windows has no in-place exec, so a new process takes over and this one ends.
+    Called only after main() released the library lock: a child that found it still held would exit as 'already running'."""
+    command = [sys.executable, "-m", "paperdesk", *sys.argv[1:]]
+    if os.name == "nt":
+        import subprocess
+        subprocess.Popen(command, close_fds=True)
+        return 0
+    os.execv(sys.executable, command)
 
 
 def command_serve(args: argparse.Namespace) -> int:
@@ -170,7 +195,19 @@ def command_backup(args: argparse.Namespace) -> int:
             raise ValueError('Inspect the backup first; restoring requires --replace-library. Close the app before restoring.')
         checked = archive.prepare(Path(args.path).expanduser().resolve())
         archive.schedule(checked['token'])
-        apply_pending_restore(paths)
+        try:
+            apply_pending_restore(paths)
+        except PermissionError as error:
+            # Usually Windows: a file in the library folder is open in another program, so the folder can't be moved.
+            from .domain.errors import InvalidInput
+            root = paths.root.resolve()
+            if root.with_name('.'+root.name+'-restore.json').exists():
+                raise InvalidInput('The restore did not finish: the library folder could not be moved. Close Paperdesk and any '
+                                   'program that may be using files in it, then run the same command again.') from error
+            (root/'pending-restore.json').unlink(missing_ok=True)  # nothing changed, so the next launch must not restore either
+            raise InvalidInput(f'Restore failed and your current library was not changed: the library folder could not be moved '
+                               f'({root}). Close Paperdesk and any program that may be using files in that folder (File Explorer, '
+                               'an editor, sync or antivirus software), then run the restore again.') from error
         print('Restored. Previous library retained in the adjacent .before-restore directory. Recheck AI connections.')
     return 0
 
@@ -233,7 +270,8 @@ def main(argv: list[str] | None = None) -> int:
                 stack.enter_context(library_lock(root))
             if args.command == 'backup':
                 stack.enter_context(library_access(root, exclusive=args.action == 'restore'))
-            return args.func(args)
+            result = args.func(args)
     except ReaderError as error:
         print(str(error), file=sys.stderr)
         return 1
+    return _relaunch() if result == RELAUNCH else result

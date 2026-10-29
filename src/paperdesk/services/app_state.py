@@ -23,6 +23,10 @@ def _one_of(*choices: str) -> Callable[[Any], bool]:
     return lambda value: value in choices
 
 
+def _pixels(low: int, high: int) -> Callable[[Any], bool]:
+    return lambda value: isinstance(value, int) and not isinstance(value, bool) and low <= value <= high
+
+
 def _id_list(value: Any) -> bool:
     return isinstance(value, list) and len(value) <= 2000 and all(isinstance(v, str) and len(v) <= 64 for v in value)
 
@@ -32,6 +36,8 @@ PREFERENCES: dict[str, tuple[Any, Callable[[Any], bool]]] = {
     "theme": ("system", _one_of("system", "dark", "light")),
     "sidebar": ("shown", _one_of("shown", "hidden")),
     "assistant": ("open", _one_of("open", "collapsed")),
+    "sidebar_width": (252, _pixels(200, 420)),
+    "assistant_width": (380, _pixels(300, 640)),
     "translation_mode": ("side", _one_of("side", "over", "off")),
     "navigator": ("closed", _one_of("open", "closed")),
     "navigator_tab": ("sections", _one_of("sections", "pages")),

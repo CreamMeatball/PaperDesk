@@ -33,6 +33,10 @@ class Platform(ABC):
         """Extra pywebview create_window() options (translucency etc.)."""
         return {}
 
+    def webview_storage(self, data_dir: Path) -> Path:
+        """Cache and cookies of the window's web engine (not part of backups)."""
+        return data_dir / "webview"
+
     def extra_bin_dirs(self) -> tuple[str, ...]:
         return ()
 
@@ -85,6 +89,11 @@ class WindowsPlatform(Platform):
 
     def secret_store(self, data_dir: Path) -> SecretStore:
         return CredentialManagerSecretStore(KEYCHAIN_SERVICE)
+
+    def webview_storage(self, data_dir: Path) -> Path:
+        # Beside the library, not inside it: a WebView2 process left over after a crash keeps these files open,
+        # and Windows then refuses to swap the library folder during a backup restore.
+        return data_dir.with_name(data_dir.name + "-webview")
 
     def preferred_language(self) -> str:
         # The display languages chosen in Windows Settings. GUI launches have no LANG, and locale names look like 'Korean_Korea'.

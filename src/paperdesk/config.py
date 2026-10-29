@@ -38,10 +38,6 @@ class AppPaths:
     def settings_file(self) -> Path:
         return self.root / "settings.json"
 
-    @property
-    def webview_storage(self) -> Path:
-        return self.root / "webview"
-
     def ensure(self) -> "AppPaths":
         self.root.mkdir(parents=True, exist_ok=True)
         os.chmod(self.root, 0o700)

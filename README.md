@@ -64,7 +64,7 @@ python3.12 scripts/install_source.py
 ~/.paperdesk-beta/venv/bin/python -m paperdesk     # 앱 창 열기
 ```
 
-- 업데이트: `git pull` 후 설치 명령을 다시 실행합니다(자동 업데이트 없음).
+- 업데이트: 설치할 때 자동 업데이트를 켤지 한 번 묻습니다(`--auto-update`/`--no-auto-update`로 미리 정할 수 있음). 설치 스크립트는 저장소의 origin을 설치 폴더 안에 따로 받아(`source`) 그 사본을 설치하므로, 개발 중인 작업 폴더는 건드리지 않습니다. 켜 두면 앱이 실행 중에 GitHub에서 새 커밋만 받아 두고(git이 바뀐 부분만 전송), 다음에 앱을 열 때 창을 띄우기 전에 적용한 뒤 다시 시작합니다. 고정 버전 목록(`requirements/*.lock`)이 바뀐 커밋에서만 패키지를 다시 받으며, 적용에 실패하면 이전 커밋으로 되돌려 실행합니다. 꺼 두면 설정 → **업데이트 확인**으로 받을 때만 적용됩니다. git이나 origin이 없으면(ZIP으로 받은 경우 등) 예전처럼 이 폴더를 그대로 설치하며, 이때는 `git pull` 후 설치 명령을 다시 실행합니다.
 - 제거: 설치 명령에 `--uninstall`을 붙입니다.
 - Claude 데스크톱·Codex 연결: 설치가 끝나면 표시되는 `... -m paperdesk mcp-config claude`(또는 `codex`) 결과를 각 앱 설정에 넣습니다.
 

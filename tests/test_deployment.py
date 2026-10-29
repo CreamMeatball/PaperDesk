@@ -540,6 +540,32 @@ class ReviewRegressionTests(unittest.TestCase):
                         self.assertEqual(main(args), 1, args)
                 build.assert_not_called()
 
+    def test_cli_restore_blocked_by_an_open_file_explains_and_keeps_the_library(self):
+        import io
+        from paperdesk.cli import main
+        archive = str(self.app.archives.export())
+        self.app.library.rename(self.doc.id, 'changed since backup')
+        root = self.paths.root.resolve()
+        replace = os.replace
+        def held_open(source, target):
+            if Path(source) == root:  # Windows: another program has a file inside the library folder open
+                raise PermissionError(13, 'Access is denied', str(source))
+            return replace(source, target)
+        def title():
+            with closing(sqlite3.connect(root/'library.sqlite3')) as db:
+                return db.execute('SELECT title FROM documents').fetchone()[0]
+        with mock.patch.dict(os.environ, {'PAPERDESK_HOME':str(self.paths.root)}):
+            with mock.patch('paperdesk.infrastructure.archives.os.replace', side_effect=held_open), \
+                 mock.patch('paperdesk.infrastructure.archives.time.sleep'), mock.patch('sys.stderr', io.StringIO()) as stderr:
+                self.assertEqual(main(['backup','restore',archive,'--replace-library']), 1)
+            self.assertIn('current library was not changed', stderr.getvalue())
+            self.assertNotIn('Traceback', stderr.getvalue())
+            self.assertEqual(title(), 'changed since backup')
+            self.assertFalse((root/'pending-restore.json').exists())  # the next launch does not restore unasked
+            with mock.patch('sys.stdout', io.StringIO()):
+                self.assertEqual(main(['backup','restore',archive,'--replace-library']), 0)  # once the file is closed
+        self.assertEqual(title(), 'original')
+
     def test_shared_app_and_mcp_access_coexist_but_restore_is_exclusive(self):
         from paperdesk.cli import _application
         from paperdesk.infrastructure.instance import library_access

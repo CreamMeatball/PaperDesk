@@ -14,6 +14,12 @@ import { migrateLegacy, pref, setPref } from "./js/prefs.js";
 import { shortcutKey, dialogOpen } from "./js/keyboard.js";
 
 var VIEWS = { library: LibraryView, reader: ReaderView, settings: SettingsView };
+// Resizable side panes; bounds match the saved-preference validation on the app side.
+var PANES = {
+  sidebar: { pref: "sidebar_width", css: "--sidebar-width", min: 200, max: 420, fallback: 252, label: "사이드바 너비 조절" },
+  assistant: { pref: "assistant_width", css: "--assistant-width", min: 300, max: 640, fallback: 380, label: "AI 도우미 너비 조절" }
+};
+var MIN_MAIN = 560;  // the reader's side-by-side view needs a page plus a 260px translation column
 
 // Application controller: owns shared state and the actions views call. Views stay dumb.
 class App {
@@ -32,8 +38,16 @@ class App {
     document.body.append(this.fileInput);
     if (pref("sidebar") === "hidden") this.shell.classList.add("sidebar-hidden");
     if (pref("assistant") === "collapsed") this.shell.classList.add("assistant-collapsed");
+    this.paneWidths = {};
+    this.resizers = Object.keys(PANES).map(function (name) {
+      this.setPaneWidth(name, pref(PANES[name].pref, PANES[name].fallback), false);
+      return this.resizer(name);
+    }, this);
+    this.shell.append.apply(this.shell, this.resizers);
 
     var self = this;
+    // A narrow middle card compacts the reader toolbar so the paper title keeps some room.
+    new ResizeObserver(function (entries) { self.mainEl.classList.toggle("compact", entries[0].contentRect.width < 680); }).observe(this.mainEl);
     this.router.addEventListener("change", function () { self.render(); });
     this.store.addEventListener("change", function () {
       self.sidebar.render();
@@ -90,6 +104,7 @@ class App {
     var View = route.name === "library" && route.scope === "reading" ? ReadingListView : VIEWS[route.name];
     this.view = new View(this.mainEl, this, route);
     this.sidebar.render();
+    this.resizers.forEach(function (handle) { handle.setAttribute("aria-label", t(PANES[handle.dataset.pane].label)); });
   }
 
   currentFolder() {
@@ -113,6 +128,55 @@ class App {
   }
   showAssistant() {
     if (this.shell.classList.contains("assistant-collapsed")) this.toggleAssistant();
+  }
+  paneShown(name) {
+    var classes = this.shell.classList;
+    return name === "sidebar" ? !classes.contains("sidebar-hidden") : classes.contains("with-assistant") && !classes.contains("assistant-collapsed");
+  }
+  // Keeps the middle card at least MIN_MAIN wide; save=true stores the width and lets the reader refit its pages.
+  setPaneWidth(name, width, save) {
+    var spec = PANES[name], other = name === "sidebar" ? "assistant" : "sidebar";
+    var room = innerWidth - MIN_MAIN - (this.paneShown(other) ? this.paneWidths[other] || 0 : 0);
+    width = Math.round(Math.max(spec.min, Math.min(spec.max, room, Number(width) || spec.fallback)));
+    this.paneWidths[name] = width;
+    this.shell.style.setProperty(spec.css, width + "px");
+    if (save) {
+      setPref(spec.pref, width);
+      window.dispatchEvent(new Event("resize"));
+    }
+  }
+  // Drag the gap between two cards; arrow keys move it by 16px and double-click restores the default width.
+  resizer(name) {
+    var self = this, spec = PANES[name];
+    var handle = h("div", { class: "pane-resizer", "data-pane": name, role: "separator", "aria-orientation": "vertical", tabindex: "0" });
+    function widthAt(x) { return name === "sidebar" ? x + 4 : innerWidth - x - 4; }
+    handle.addEventListener("pointerdown", function (event) {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      handle.setPointerCapture(event.pointerId);
+      handle.classList.add("active");
+      self.shell.classList.add("resizing");
+      function move(e) { self.setPaneWidth(name, widthAt(e.clientX), false); }
+      function up() {
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", up);
+        handle.removeEventListener("pointercancel", up);
+        handle.classList.remove("active");
+        self.shell.classList.remove("resizing");
+        self.setPaneWidth(name, self.paneWidths[name], true);
+      }
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", up);
+      handle.addEventListener("pointercancel", up);
+    });
+    handle.addEventListener("dblclick", function () { self.setPaneWidth(name, spec.fallback, true); });
+    handle.addEventListener("keydown", function (event) {
+      var step = event.key === "ArrowLeft" ? -16 : event.key === "ArrowRight" ? 16 : 0;
+      if (!step) return;
+      event.preventDefault();
+      self.setPaneWidth(name, self.paneWidths[name] + (name === "sidebar" ? step : -step), true);
+    });
+    return handle;
   }
   themeChanged() { this.sidebar.render(); }
   backToLibrary() { this.router.go(this.lastLibrary || "/library"); }

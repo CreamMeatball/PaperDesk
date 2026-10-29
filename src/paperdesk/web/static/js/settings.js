@@ -77,15 +77,12 @@ export class SettingsView {
         h("button", { class: "btn", disabled: !data || !data.can_check, onclick: async function (event) {
           var button = event.currentTarget;
           button.disabled = true;
-          try { await self.app.api.post("/api/updates/check"); }
+          try { await self.app.api.post("/api/updates/check"); await self.render(false); }  // show the new status
           catch (error) { toast(error.message, true); }
           finally { if (button.isConnected) button.disabled = false; }
         } }, t("업데이트 확인"))),
       h("div", { class: "field-row" }, h("div", { class: "k" }, t("새 버전 자동 확인"),
-        h("small", null, t("켜면 주기적으로 업데이트 서버에 연결해요. 설치 전에 확인을 받아요."))), automatic),
-      h("div", { class: "field-row" }, h("div", { class: "k" }, t("Homebrew로 업데이트"),
-        h("small", null, t("Homebrew로 설치했다면 터미널에서 실행할 수 있어요.")),
-        h("code", null, "brew upgrade --cask paperdesk"))));
+        h("small", null, t("켜면 주기적으로 업데이트 서버에 연결해 새 버전을 확인해요."))), automatic));
   }
 
   general(data) {

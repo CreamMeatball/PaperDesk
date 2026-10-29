@@ -51,7 +51,8 @@ class UpdateTests(unittest.TestCase):
         service = UpdateService()
         state = service.view('en')
         self.assertFalse(state['available'])
-        self.assertIn('distributed macOS app', state['message'])
+        self.assertIn("can't update itself", state['message'])
+        self.assertNotIn('up to date', state['message'])
         with self.assertRaises(ProviderUnavailable):
             service.check()
         self.assertFalse(SparkleUpdates().state().available)

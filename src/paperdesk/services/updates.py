@@ -9,7 +9,7 @@ from ..ports.updates import UpdateBackend, UpdateState
 
 class UnavailableUpdates(UpdateBackend):
     def state(self) -> UpdateState:
-        return UpdateState(False, False, message=_("앱 업데이트는 배포용 macOS 앱에서 사용할 수 있어요."))
+        return UpdateState(False, False, message=_("이 설치에서는 앱 안에서 업데이트할 수 없어요. git으로 받은 저장소에서 설치 스크립트로 설치하면 자동 업데이트를 쓸 수 있어요."))
 
     def check(self) -> None:
         raise ProviderUnavailable(self.state().message)

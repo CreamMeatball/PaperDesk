@@ -95,6 +95,38 @@ class ProcessTests(unittest.TestCase):
             self.assertFalse(_alive(pid))
 
 
+class WebViewStorageTests(unittest.TestCase):
+    def test_windows_keeps_the_web_engine_files_beside_the_library_not_inside_it(self):
+        from paperdesk.platforms import LinuxPlatform, MacPlatform, WindowsPlatform
+        library = Path('Users')/'me'/'AppData'/'Local'/'Paperdesk'
+        self.assertEqual(WindowsPlatform().webview_storage(library), library.with_name('Paperdesk-webview'))
+        # WKWebView keeps nothing there and macOS has no folder-swap problem, so its path is unchanged.
+        self.assertEqual(MacPlatform().webview_storage(library), library/'webview')
+        self.assertEqual(LinuxPlatform().webview_storage(library), library/'webview')
+
+
+class RelaunchTests(unittest.TestCase):
+    def test_restart_after_an_update_waits_until_the_library_lock_is_released(self):
+        # On Windows the updated version starts as a new process; if this one still held the lock,
+        # the new one would exit as 'already running' and, under pythonw, the app would silently not open.
+        from paperdesk import cli as commands
+        from paperdesk.infrastructure.instance import library_lock
+        with tempfile.TemporaryDirectory() as folder:
+            home = Path(folder)/'library'
+            started = []
+
+            def relaunch():
+                with library_lock(home):
+                    started.append(True)
+                return 0
+
+            with mock.patch.dict(os.environ, {'PAPERDESK_HOME': str(home)}), \
+                    mock.patch.object(commands, 'command_open', return_value=commands.RELAUNCH), \
+                    mock.patch.object(commands, '_relaunch', side_effect=relaunch):
+                self.assertEqual(commands.main(['open']), 0)
+            self.assertEqual(started, [True])
+
+
 class Utf8StdioTests(unittest.TestCase):
     def test_mcp_speaks_utf8_over_pipes_whatever_the_system_code_page(self):
         # Korean Windows pipes default to cp949, which has neither these characters nor UTF-8 framing.

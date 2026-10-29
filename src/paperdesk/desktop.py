@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 import webbrowser
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -57,7 +58,8 @@ class NativeWindowShell(DesktopShell):
         webview.settings['ALLOW_DOWNLOADS'] = True
 
         updater = None
-        if self.platform.name == "macos" and self.updates is not None:
+        # Sparkle only works inside the packaged .app; source installs attach their own git updates.
+        if self.platform.name == "macos" and self.updates is not None and getattr(sys, "frozen", False):
             from .infrastructure.macos_updates import SparkleUpdates
             updater = SparkleUpdates()
             self.updates.attach(updater)

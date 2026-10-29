@@ -5,10 +5,12 @@
     macOS:    python3.12 scripts/install_source.py
 
 Creates a separate Python environment with the same pinned packages as the release builds
-(native window and Docling analysis, about 1.3 GB), installs Paperdesk into it and, on Windows,
-adds a "Paperdesk (beta)" Start menu shortcut. Run it again after `git pull` to update.
---uninstall removes the environment and the shortcut. Your library (PDFs, notes, translations,
-settings) lives in a separate data folder and is never touched.
+(native window and Docling analysis, about 1.3 GB), clones this repository's origin into the install
+folder and installs Paperdesk from that clone (editable) and, on Windows, adds a "Paperdesk (beta)"
+Start menu shortcut. With automatic updates on (asked once, or --auto-update), the app fetches new
+commits from GitHub in the background and applies them the next time it opens; running this script
+again also updates. --uninstall removes the environment, the clone and the shortcut. Your library
+(PDFs, notes, translations, settings) lives in a separate data folder and is never touched.
 
 On Windows use Python 3.12 from python.org: its python.exe is signed, so Smart App Control lets it
 run. Smart App Control blocks unsigned programs, including ones you build yourself.
@@ -18,6 +20,7 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import venv
@@ -98,6 +101,77 @@ def data_folder() -> Path:
     return AppPaths.default().root
 
 
+def updater():
+    """The app's own update helpers (git without prompts, the install record), so both sides agree."""
+    sys.path.insert(0, str(ROOT / "src"))
+    from paperdesk.infrastructure import source_update
+
+    return source_update
+
+
+def origin_url() -> str | None:
+    git = updater().find_git()
+    if git is None:
+        return None
+    try:
+        done = updater().run_git(git, "-C", str(ROOT), "remote", "get-url", "origin", timeout=15)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return done.stdout.strip() if done.returncode == 0 and done.stdout.strip() else None
+
+
+def prepare_source(prefix: Path, url: str | None, branch: str) -> Path | None:
+    """The install's own clone at origin/<branch>, or None (no git or remote): then install from this folder without updates."""
+    module, clone = updater(), prefix / "source"
+    git = module.find_git()
+    if git is None or not url:
+        print("Automatic updates need git and a repository with an origin remote; installing this folder as it is.", file=sys.stderr)
+        return None
+    try:
+        if (clone / ".git").is_dir():
+            steps = [("fetch", "--quiet", "--no-tags", "origin", branch), ("reset", "--quiet", "--hard", f"origin/{branch}")]
+            cwd = clone
+        else:
+            steps = [("clone", "--quiet", "--config", "core.autocrlf=false", "--branch", branch, "--single-branch", url, str(clone))]
+            cwd = prefix
+        for step in steps:
+            print("+ git", " ".join(step), flush=True)
+            done = module.run_git(git, *step, cwd=cwd, timeout=600)
+            if done.returncode != 0:
+                raise OSError(done.stderr.strip() or f"git {step[0]} failed")
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print(f"Could not prepare the update clone ({error}); installing this folder without automatic updates.", file=sys.stderr)
+        return None
+    return clone
+
+
+def ask_auto_update(previous: bool | None) -> bool:
+    if previous is not None:
+        return previous
+    if not sys.stdin.isatty():
+        return False
+    answer = input("Check GitHub for new versions when Paperdesk opens and update automatically? [Y/n] ").strip().lower()
+    return answer in ("", "y", "yes")
+
+
+def record(prefix: Path, source: Path | None, branch: str, auto_update: bool | None) -> bool | None:
+    """Write (or, without a clone, remove) the install record that the app reads for updates."""
+    module = updater()
+    config = prefix / module.CONFIG
+    if source is None:
+        config.unlink(missing_ok=True)
+        return None
+    previous = module.SourceInstall.load(prefix)
+    enabled = ask_auto_update(auto_update if auto_update is not None else previous.data.get("auto_update") if previous else None)
+    git = module.find_git()
+    commit = module.run_git(git, "rev-parse", "HEAD", cwd=source).stdout.strip()
+    names = [f"requirements/{path.name}" for path in locks()]
+    data = {"source": str(source), "branch": branch, "commit": commit, "lock_files": names,
+            "locks": module.lock_digest(source, names), "auto_update": enabled, "error": ""}
+    module.SourceInstall(prefix, data, git=git).save()
+    return enabled
+
+
 def matching_environment(environment: Path) -> bool:
     try:
         lines = (environment / "pyvenv.cfg").read_text(encoding="utf-8").splitlines()
@@ -112,7 +186,7 @@ def run(*args) -> None:
     subprocess.run([str(arg) for arg in args], check=True)
 
 
-def install(prefix: Path) -> None:
+def install(prefix: Path, *, url: str | None = None, branch: str = "main", auto_update: bool | None = None) -> None:
     if sys.prefix != sys.base_prefix:
         raise SystemExit("Run this with the system Python, not from inside a virtual environment.")
     if sys.version_info[:2] != PYTHON:
@@ -133,11 +207,18 @@ def install(prefix: Path) -> None:
         print(f"Creating {environment}", flush=True)
         venv.EnvBuilder(with_pip=True, clear=True).create(environment)
     python = environment_python(environment)
+    source = prepare_source(prefix, url or origin_url(), branch)
+    tree = source or ROOT
     pip = (python, "-m", "pip", "install", "--disable-pip-version-check", "--require-virtualenv")
-    run(*pip, *[arg for lock in requirements for arg in ("-r", lock)])
-    # Paperdesk itself: dependencies come only from the pinned locks above.
-    run(*pip, "--no-deps", "--force-reinstall", ROOT)
+    run(*pip, *[arg for lock in requirements for arg in ("-r", tree / "requirements" / lock.name)])
+    # Paperdesk itself: dependencies come only from the pinned locks above (they include setuptools, so no
+    # build download). The clone is installed editable: an update is then just a checkout of new commits.
+    if source:
+        run(*pip, "--no-deps", "--no-build-isolation", "-e", source)
+    else:
+        run(*pip, "--no-deps", "--no-build-isolation", "--force-reinstall", ROOT)
     run(python, "-m", "paperdesk", "--version")
+    automatic = record(prefix, source, branch, auto_update)
 
     print("\nPaperdesk (beta) is installed.")
     if WINDOWS:
@@ -146,9 +227,21 @@ def install(prefix: Path) -> None:
     else:
         print(f"  Run:         {python} -m paperdesk")
     print(f"  MCP setup:   \"{python}\" -m paperdesk mcp-config claude   (or codex)")
-    print(f"  Update:      git pull, then run this script again")
+    if automatic:
+        print(f"  Update:      automatic; new commits from GitHub apply the next time Paperdesk opens (Settings to turn off)")
+    elif source:
+        print(f"  Update:      Settings → check for updates, or run this script again (automatic updates are off)")
+    else:
+        print(f"  Update:      not automatic (no git clone with an origin). Get the new version (a new ZIP, or git pull "
+              f"in a clone) and run this script again; installing from a git clone enables automatic updates")
     print(f"  Uninstall:   run this script with --uninstall")
     print(f"  Library:     {data_folder()} (kept on update and uninstall)")
+
+
+def _remove_read_only(function, path, _error) -> None:
+    # Git makes its object files read-only, and Windows refuses to delete read-only files.
+    os.chmod(path, stat.S_IWRITE)
+    function(path)
 
 
 def uninstall(prefix: Path) -> None:
@@ -157,7 +250,16 @@ def uninstall(prefix: Path) -> None:
     if prefix.exists():
         if not (prefix / MARKER).is_file():
             raise SystemExit(f"{prefix} was not created by this script; not removing it.")
-        shutil.rmtree(prefix)
+        # Remove the marker last, so an interrupted uninstall can simply be run again.
+        for child in sorted(prefix.iterdir(), key=lambda p: p.name == MARKER):
+            if child.is_dir() and not child.is_symlink():
+                if sys.version_info >= (3, 12):
+                    shutil.rmtree(child, onexc=_remove_read_only)
+                else:
+                    shutil.rmtree(child, onerror=lambda f, p, e: _remove_read_only(f, p, e))
+            else:
+                _remove_read_only(Path.unlink, child, None)
+        prefix.rmdir()
     print(f"Removed {prefix}. Your library in {data_folder()} was kept.")
 
 
@@ -165,9 +267,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--prefix", type=Path, default=default_prefix(), help="Where to put the Python environment")
     parser.add_argument("--uninstall", action="store_true", help="Remove the environment and shortcut (keeps your library)")
+    parser.add_argument("--source-url", help="Repository to clone for updates (default: this folder's origin remote)")
+    parser.add_argument("--branch", default="main", help="Branch to follow for updates (default: main)")
+    parser.add_argument("--auto-update", action=argparse.BooleanOptionalAction, default=None,
+                        help="Update automatically from GitHub when the app opens (asked once if omitted)")
     args = parser.parse_args()
     prefix = args.prefix.expanduser().resolve()
-    uninstall(prefix) if args.uninstall else install(prefix)
+    if args.uninstall:
+        uninstall(prefix)
+    else:
+        install(prefix, url=args.source_url, branch=args.branch, auto_update=args.auto_update)
     return 0
 
 

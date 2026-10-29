@@ -14,7 +14,7 @@ import { shortcutKey, isTypingTarget, dialogOpen } from "./keyboard.js";
 
 import { loadPdfjs, extractPdfTitle } from "./pdf.js";
 
-var MIN_ZOOM = 0.5, MAX_ZOOM = 3, GAP = 18, TCOL_RATIO = 0.72;
+var MIN_ZOOM = 0.5, MAX_ZOOM = 3, GAP = 18, TCOL_RATIO = 0.72, TCOL_MIN = 260;
 
 // PDF viewer core. Features plug in as objects with optional hooks:
 //   onAnalysis()            document analysis (blocks, figures, sections) is ready
@@ -162,7 +162,8 @@ export class ReaderView {
   computeFit() {
     var widest = Math.max.apply(null, this.pages.map(function (p) { return p.size.width; }));
     var available = Math.max(320, this.pagesEl.clientWidth - 72);
-    if (this.tmode === "side") available = (available - GAP) / (1 + TCOL_RATIO);
+    // the translation column never gets narrower than TCOL_MIN, so a narrow window leaves the page that much less
+    if (this.tmode === "side") available = Math.min((available - GAP) / (1 + TCOL_RATIO), available - GAP - TCOL_MIN);
     return Math.max(0.35, Math.min(2.2, available / widest));
   }
 
@@ -199,7 +200,7 @@ export class ReaderView {
       p.el.style.setProperty("--scale-factor", scale);
       p.el.style.setProperty("--user-unit", "1");
       p.el.style.setProperty("--total-scale-factor", scale);
-      p.tcol.style.width = side ? Math.max(260, Math.round(width * TCOL_RATIO)) + "px" : "0px";
+      p.tcol.style.width = side ? Math.max(TCOL_MIN, Math.round(width * TCOL_RATIO)) + "px" : "0px";
       p.tcol.style.height = height + "px";
     });
     this.zoomLabel.textContent = Math.round(this.zoom * 100) + "%";

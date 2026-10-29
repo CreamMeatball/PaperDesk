@@ -42,7 +42,7 @@ class SparkleUpdates(UpdateBackend):
             self._on_main(self._initialize)
         except Exception:
             log.exception("Could not initialize the native updater")
-            self._message = _("앱 업데이트를 시작하지 못했어요. Homebrew 업데이트를 이용할 수 있어요.")
+            self._message = _("앱 업데이트를 시작하지 못했어요.")
 
     def _initialize(self) -> None:
         from Foundation import NSBundle, NSClassFromString

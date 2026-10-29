@@ -1,3 +1,5 @@
+import os
+import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -51,6 +53,13 @@ class SourceInstallTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 self.installer.uninstall(other)
             self.assertTrue(other.exists())
+            # Git object files are read-only; Windows refuses to delete them unless that is cleared.
+            objects = mine/'source'/'.git'/'objects'/'00'
+            objects.mkdir(parents=True)
+            (objects/'585fb4').write_text('blob', encoding='utf-8')
+            os.chmod(objects/'585fb4', stat.S_IREAD)
+            (mine/'Paperdesk.ico').touch()
+            os.chmod(mine/'Paperdesk.ico', stat.S_IREAD)
             with mock.patch('builtins.print'):
                 self.installer.uninstall(mine)
             self.assertFalse(mine.exists())
