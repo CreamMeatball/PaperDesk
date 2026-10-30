@@ -8,7 +8,7 @@ Creates a separate Python environment with the same pinned packages as the relea
 (native window and Docling analysis, about 1.3 GB), clones this repository's origin into the install
 folder and installs Paperdesk from that clone (editable), and adds "Paperdesk (beta)" to Applications
 (macOS) or the Start menu (Windows). With automatic updates on (asked once, or --auto-update), the app
-fetches new commits from GitHub in the background and applies them the next time it opens; running this
+fetches new releases from GitHub in the background and applies them the next time it opens; running this
 script again also updates. --uninstall removes the environment, the clone and the app or shortcut. Your
 library (PDFs, notes, translations, settings) lives in a separate data folder and is never touched.
 
@@ -174,7 +174,8 @@ def origin_url() -> str | None:
 
 
 def prepare_source(prefix: Path, url: str | None, branch: str) -> Path | None:
-    """The install's own clone at origin/<branch>, or None (no git or remote): then install from this folder without updates."""
+    """The install's own clone at the newest release (origin/<branch> without release tags), or None (no git or
+    remote): then install from this folder without updates."""
     module, clone = updater(), prefix / "source"
     git = module.find_git()
     if git is None or not url:
@@ -182,7 +183,7 @@ def prepare_source(prefix: Path, url: str | None, branch: str) -> Path | None:
         return None
     try:
         if (clone / ".git").is_dir():
-            steps = [("fetch", "--quiet", "--no-tags", "origin", branch), ("reset", "--quiet", "--hard", f"origin/{branch}")]
+            steps = [("fetch", "--quiet", "--no-tags", "origin", branch, "+refs/tags/v*:refs/tags/v*")]
             cwd = clone
         else:
             steps = [("clone", "--quiet", "--config", "core.autocrlf=false", "--branch", branch, "--single-branch", url, str(clone))]
@@ -192,6 +193,13 @@ def prepare_source(prefix: Path, url: str | None, branch: str) -> Path | None:
             done = module.run_git(git, *step, cwd=cwd, timeout=600)
             if done.returncode != 0:
                 raise OSError(done.stderr.strip() or f"git {step[0]} failed")
+        # Start from the newest release, as the app's own updates do; main between releases is not handed out.
+        tags = module.run_git(git, "tag", "--list", "v*", cwd=clone, timeout=60).stdout.split()
+        step = ("reset", "--quiet", "--hard", module.latest_release(tags) or f"origin/{branch}")
+        print("+ git", " ".join(step), flush=True)
+        done = module.run_git(git, *step, cwd=clone, timeout=600)
+        if done.returncode != 0:
+            raise OSError(done.stderr.strip() or "git reset failed")
     except (OSError, subprocess.TimeoutExpired) as error:
         print(f"Could not prepare the update clone ({error}); installing this folder without automatic updates.", file=sys.stderr)
         return None
@@ -284,7 +292,7 @@ def install(prefix: Path, *, url: str | None = None, branch: str = "main", auto_
         print(f"  or run:      {python} -m paperdesk")
     print(f"  MCP setup:   \"{python}\" -m paperdesk mcp-config claude   (or codex)")
     if automatic:
-        print(f"  Update:      automatic; new commits from GitHub apply the next time Paperdesk opens (Settings to turn off)")
+        print(f"  Update:      automatic; new releases from GitHub apply the next time Paperdesk opens (Settings to turn off)")
     elif source:
         print(f"  Update:      Settings → check for updates, or run this script again (automatic updates are off)")
     else:
@@ -301,6 +309,8 @@ def _remove_read_only(function, path, _error) -> None:
 
 
 def uninstall(prefix: Path) -> None:
+    # Ask first: run from the install's own copy (prefix/source), the code is gone once the prefix is removed.
+    library = data_folder()
     if WINDOWS:
         shortcut_path().unlink(missing_ok=True)
     if MACOS:
@@ -318,7 +328,7 @@ def uninstall(prefix: Path) -> None:
             else:
                 _remove_read_only(Path.unlink, child, None)
         prefix.rmdir()
-    print(f"Removed {prefix}. Your library in {data_folder()} was kept.")
+    print(f"Removed {prefix}. Your library in {library} was kept.")
 
 
 def main() -> int:
@@ -326,7 +336,7 @@ def main() -> int:
     parser.add_argument("--prefix", type=Path, default=default_prefix(), help="Where to put the Python environment")
     parser.add_argument("--uninstall", action="store_true", help="Remove the environment and shortcut (keeps your library)")
     parser.add_argument("--source-url", help="Repository to clone for updates (default: this folder's origin remote)")
-    parser.add_argument("--branch", default="main", help="Branch to follow for updates (default: main)")
+    parser.add_argument("--branch", default="main", help="Branch to clone; updates follow its release tags (vX.Y.Z), or the branch itself if it has none (default: main)")
     parser.add_argument("--auto-update", action=argparse.BooleanOptionalAction, default=None,
                         help="Update automatically from GitHub when the app opens (asked once if omitted)")
     args = parser.parse_args()

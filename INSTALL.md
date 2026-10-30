@@ -42,11 +42,11 @@ Open **Paperdesk (beta)** from the Start menu.
 
 - It creates a Python environment in `~/.paperdesk-beta` (macOS) or `%LOCALAPPDATA%\Programs\Paperdesk-beta` (Windows). Change this with `--prefix`.
 - It installs the same pinned packages as the release builds from `requirements/*.lock`. This is about 1.3 GB and takes several minutes.
-- It makes its own clone of the repository inside that folder and installs Paperdesk from it. The folder you cloned above is not used afterwards, and you can delete it.
+- It makes its own clone of the repository inside that folder, checks out the newest release, and installs Paperdesk from it. The folder you cloned above is not used afterwards, and you can delete it.
 - It adds **Paperdesk (beta)** to Applications on macOS (to `~/Applications` if your account can't write to `/Applications`), or to the Start menu on Windows.
 - At the end it prints a summary: how to run Paperdesk, the MCP setup command, the update mode, and where your library is.
 
-**Updates.** `--auto-update` lets Paperdesk download new commits from GitHub in the background and apply them the next time it opens, or right away when you choose **Restart now** in Settings. Only the changed files are transferred, and packages are reinstalled only when the pinned versions change. If an update fails, Paperdesk keeps running the previous version.
+**Updates.** `--auto-update` lets Paperdesk download new releases (version tags) from GitHub in the background and apply them the next time it opens, or right away when you choose **Restart now** in Settings. Only the changed files are transferred, and packages are reinstalled only when the pinned versions change. If an update fails, Paperdesk keeps running the previous version.
 
 Use `--no-auto-update` instead to update only when you choose **Settings → About and updates → Check for updates**, or when you run the script again. If you leave out both flags, the script asks once in an interactive terminal; when nothing can answer the prompt (scripts, agents) it uses no automatic updates.
 
@@ -92,6 +92,16 @@ Run the install command again with `--uninstall`. This removes the environment, 
 
 - macOS: `~/Library/Application Support/Paperdesk`
 - Windows: `%LOCALAPPDATA%\Paperdesk`
+
+If you deleted the folder you cloned, use the copy inside the install folder:
+
+```sh
+python3.12 ~/.paperdesk-beta/source/scripts/install_source.py --uninstall
+```
+
+```bat
+py -3.12 "%LOCALAPPDATA%\Programs\Paperdesk-beta\source\scripts\install_source.py" --uninstall
+```
 
 ## Troubleshooting
 

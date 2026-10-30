@@ -1,15 +1,17 @@
 """Updates for source installs (scripts/install_source.py).
 
 The install keeps its own git clone of the repository, installed in editable mode, so a code update is
-only a checkout. New commits are fetched in the background while the app runs and applied the next time it
-opens, before any window or server starts; dependencies are reinstalled only when the pinned locks change.
-The user's own git and credentials are used as-is; git never prompts (no terminal or login window).
+only a checkout. New releases (vX.Y.Z tags; a repository without them follows its branch) are fetched in the
+background while the app runs and applied the next time it opens, before any window or server starts;
+dependencies are reinstalled only when the pinned locks change. The user's own git and credentials are used
+as-is; git never prompts (no terminal or login window).
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -22,6 +24,12 @@ from ..ports.updates import UpdateBackend, UpdateState
 
 CONFIG = "paperdesk-source.json"
 WINDOWS = os.name == "nt"
+RELEASE = re.compile(r"v(\d+)\.(\d+)\.(\d+)")  # pre-releases such as v1.0.0-beta.1 are not offered to installs
+
+
+def latest_release(tags: list[str]) -> str | None:
+    versions = [(tuple(map(int, match.groups())), tag) for tag in tags if (match := RELEASE.fullmatch(tag))]
+    return max(versions)[1] if versions else None
 
 
 def find_git() -> str | None:
@@ -115,10 +123,10 @@ class SourceInstall:
         return done.stdout.strip() if done.returncode == 0 else None
 
     def fetch(self, timeout: float = 60) -> bool:
-        """Download new commits only (git transfers the difference); nothing changes until the next launch."""
+        """Download new commits and release tags only (git transfers the difference); nothing changes until the next launch."""
         if self.git is None:
             return False
-        ok = self._ok("fetch", "--quiet", "--no-tags", "origin", self.branch, timeout=timeout) is not None
+        ok = self._ok("fetch", "--quiet", "--no-tags", "origin", self.branch, "+refs/tags/v*:refs/tags/v*", timeout=timeout) is not None
         # A check reports only its own result. apply_failed and local_changes stay visible in Settings until an
         # update applies; the automatic check right after launch would otherwise hide them every time.
         error = self.data.get("error") or ""
@@ -127,12 +135,26 @@ class SourceInstall:
         self.save(checked_at=utcnow(), error=error)
         return ok
 
+    def release(self) -> str | None:
+        """The newest release tag fetched from origin, or None when the repository has none."""
+        tags = self._ok("tag", "--list", "v*") if self.git else None
+        return latest_release(tags.split()) if tags else None
+
     def target(self) -> str | None:
-        return self._ok("rev-parse", "--verify", "--quiet", f"origin/{self.branch}^{{commit}}") if self.git else None
+        """What installs follow: the newest release; without any release tags (a fork, say), the branch."""
+        if not self.git:
+            return None
+        return self._ok("rev-parse", "--verify", "--quiet", f"{self.release() or 'origin/' + self.branch}^{{commit}}")
 
     def pending(self) -> str | None:
-        target = self.target()
-        return target if target and target != self.data.get("commit") else None
+        target, installed = self.target(), self.data.get("commit")
+        if not target or target == installed:
+            return None
+        # Never go back: an install that already contains the release (one made from a newer main) stays as it is.
+        # A rewritten history upstream has no such ancestry and is followed.
+        if installed and self._ok("merge-base", "--is-ancestor", target, installed) is not None:
+            return None
+        return target
 
     def behind(self) -> int:
         target = self.target()
@@ -192,14 +214,18 @@ class SourceInstall:
             return _("앱의 소스 사본에 바뀐 파일이 있어 자동 업데이트를 건너뛰었어요. 설치 스크립트를 다시 실행해 주세요.")
         if error == "apply_failed":
             return _("업데이트를 적용하지 못해 이전 버전({commit})으로 실행 중이에요. 다음에 앱을 열 때 다시 시도해요.", commit=commit)
-        behind = self.behind() if self.pending() else 0
+        pending = self.pending()
+        release = self.release() if pending else None
+        if release:
+            return _("새 버전({version})을 받아 두었어요. 앱을 다시 시작하면 적용돼요.", version=release[1:])
+        behind = self.behind() if pending else 0
         if behind:
             return _("새 버전(커밋 {n}개)을 받아 두었어요. 앱을 다시 열면 적용돼요.", n=behind)
         if error == "fetch_failed":
             return _("업데이트 서버(GitHub)에 연결하지 못했어요. 지금 버전({commit})으로 실행 중이에요.", commit=commit)
         if not self.auto_update:
-            return _("소스 설치 · 현재 버전({commit})이에요. 자동 확인이 꺼져 있어 '업데이트 확인'을 누를 때만 새 커밋을 받아요.", commit=commit)
-        return _("소스 설치 · 최신 버전({commit})이에요. 앱을 열 때 GitHub에서 새 커밋을 확인해요.", commit=commit)
+            return _("소스 설치 · 현재 버전({commit})이에요. 자동 확인이 꺼져 있어 '업데이트 확인'을 누를 때만 새 버전을 받아요.", commit=commit)
+        return _("소스 설치 · 최신 버전({commit})이에요. 앱을 열 때 GitHub에서 새 버전을 확인해요.", commit=commit)
 
 
 class SourceUpdates(UpdateBackend):

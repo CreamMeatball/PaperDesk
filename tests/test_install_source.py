@@ -69,6 +69,21 @@ class SourceInstallTests(unittest.TestCase):
                 self.installer.remove_app_bundles()
                 self.assertTrue(app.exists())
 
+    def test_uninstall_from_the_installs_own_copy_reads_the_library_path_before_removing_it(self):
+        # INSTALL.md lets the downloaded folder go; uninstalling then runs prefix/source/scripts/install_source.py,
+        # whose code (needed to find the library path) disappears with the prefix.
+        with tempfile.TemporaryDirectory() as folder, mock.patch.multiple(self.installer, WINDOWS=False, MACOS=False):
+            prefix = Path(folder)/'Paperdesk-beta'
+            (prefix/'source'/'src').mkdir(parents=True)
+            (prefix/self.installer.MARKER).touch()
+            def library():
+                self.assertTrue((prefix/'source').exists(), 'the library path was looked up after the code was removed')
+                return Path('library')
+            with mock.patch.object(self.installer, 'data_folder', side_effect=library), mock.patch('builtins.print') as shown:
+                self.installer.uninstall(prefix)
+            self.assertFalse(prefix.exists())
+            self.assertIn('library', shown.call_args.args[0])
+
     def test_uninstall_never_removes_a_folder_it_did_not_create(self):
         with tempfile.TemporaryDirectory() as folder, mock.patch.multiple(self.installer, WINDOWS=False, MACOS=False), \
                 mock.patch.object(self.installer, 'data_folder', return_value=Path('library')):

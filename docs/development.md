@@ -72,7 +72,34 @@ PDF 읽기, 그림·참고문헌 미리보기, 저장된 번역·대화·메모 
 
 ## 배포
 
-지금은 소스 설치만 제공합니다([INSTALL.md](../INSTALL.md), `scripts/install_source.py`). 설치본은 앱 전용 git 사본을 editable로 설치하고, 앱이 실행 중에 새 커밋을 받아 두었다가 다음 실행 때 적용합니다(`infrastructure/source_update.py`). DB 스키마 변경 전에는 `backups/migrations/`에 자동 백업하고, 마이그레이션 실패는 롤백합니다.
+지금은 소스 설치만 제공합니다([INSTALL.md](../INSTALL.md), `scripts/install_source.py`). 설치본은 앱 전용 git 사본을 editable로 설치하고, 앱이 실행 중에 새 **릴리스**를 받아 두었다가 다음 실행 때(또는 설정의 **지금 다시 시작**으로) 적용합니다(`infrastructure/source_update.py`). DB 스키마 변경 전에는 `backups/migrations/`에 자동 백업하고, 마이그레이션 실패는 롤백합니다.
+
+### 버전 규칙
+
+버전은 `주.부.수`(MAJOR.MINOR.PATCH, [유의적 버전](https://semver.org/lang/ko/))이고 `src/paperdesk/__init__.py`의 `__version__` 한 곳에만 둡니다.
+
+| 바뀐 내용 | 올리는 자리 | 예 |
+| --- | --- | --- |
+| 버그 수정만 | 셋째(PATCH) | 0.2.0 → 0.2.1 |
+| 기능 추가 | 둘째(MINOR), 셋째는 0으로 | 0.2.3 → 0.3.0 |
+| 이전 버전과 호환되지 않는 변경(되돌릴 수 없는 서재 형식 변경, 기능 제거) | 첫째(MAJOR) | 1.4.2 → 2.0.0 |
+
+- 1.0.0은 첫 정식 배포(서명된 설치 파일) 때 붙입니다. 그 전(0.x)에는 첫째 자리를 0으로 두고, 호환되지 않는 변경도 둘째 자리를 올리고 CHANGELOG에 분명히 적습니다.
+- 버전은 커밋마다가 아니라 릴리스할 때 올립니다. main에 올린 것은 릴리스 전까지 사용자에게 가지 않습니다.
+- 미리 시험할 버전은 `v0.3.0-beta.1`처럼 태그를 붙입니다. 자동 업데이트는 정식 태그(`vX.Y.Z`)만 따라가므로 베타 태그는 사용자에게 가지 않습니다.
+
+### 릴리스 절차
+
+1. 테스트 통과를 확인합니다(`PYTHONPATH=src python3 -m unittest discover -s tests -t .`, `node --test tests/js/reader_ui.mjs`, `python3 scripts/i18n.py check`).
+2. `__version__`을 올리고 [CHANGELOG.md](../CHANGELOG.md) 맨 위에 그 버전의 추가(Added)·변경(Changed)·수정(Fixed)을 적어 `Release X.Y.Z`로 커밋합니다.
+3. 그 커밋에 주석 태그를 붙이고 main과 함께 올립니다.
+
+   ```sh
+   git tag -a vX.Y.Z -m "Paperdesk X.Y.Z"
+   git push origin main vX.Y.Z
+   ```
+
+4. 설치본은 다음 확인 때 가장 높은 정식 태그를 받아 두고, 다시 열거나 **지금 다시 시작**을 누르면 적용합니다. 이미 그 릴리스를 포함한 설치(더 새로운 main에서 설치한 경우)는 되돌리지 않습니다. 정식 태그가 하나도 없는 저장소(포크 등)는 브랜치를 따라갑니다.
 
 패키지 배포(macOS DMG와 Sparkle 업데이트, Windows 설치 파일, Homebrew)는 첫 정식 배포 때 다시 넣습니다. 마지막 구현은 커밋 `5a339e5`에 있습니다: `scripts/build_*.py`, `scripts/release*.py`, `packaging/`의 빌드 파일, `requirements/*-build.lock`, `infrastructure/macos_updates.py`, `docs/macos-updates.md`, `docs/release-readiness.md`. 되살릴 때는 이를 뺀 커밋을 되돌리면 됩니다.
 

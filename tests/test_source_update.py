@@ -107,6 +107,26 @@ class SourceUpdateTests(unittest.TestCase):
         self.assertEqual(self.install().data["error"], "")
         self.assertIn(self.first[:7], SourceUpdates(self.install()).state().message)
 
+    def test_once_tagged_only_releases_are_applied_and_never_backwards(self):
+        released = commit(self.upstream, "src/paperdesk/__init__.py", "__version__ = '0.2.0'\n", "release 0.2.0")
+        git(self.upstream, "tag", "v0.2.0")
+        work = commit(self.upstream, "src/paperdesk/__init__.py", "__version__ = '0.2.0' # work in progress\n", "work")
+        git(self.upstream, "tag", "v0.3.0-beta.1")  # pre-releases are not offered
+        install = self.install()
+        self.assertTrue(install.fetch())
+        self.assertEqual((install.release(), install.pending()), ("v0.2.0", released))
+        self.assertIn("0.2.0", SourceUpdates(install).state().message)
+        self.assertTrue(install.apply("python"))
+        self.assertIsNone(self.install().pending())  # main moved on, but there is no newer release
+        # An install made from a newer main already contains v0.2.0; it is never moved back to it.
+        self.write_config(auto_update=True, commit=work)
+        self.assertIsNone(self.install().pending())
+        newer = commit(self.upstream, "src/paperdesk/__init__.py", "__version__ = '0.2.1'\n", "release 0.2.1")
+        git(self.upstream, "tag", "v0.2.1")
+        install = self.install()
+        install.fetch()
+        self.assertEqual(install.pending(), newer)
+
     def test_rewritten_history_upstream_is_followed(self):
         git(self.upstream, "commit", "-q", "--amend", "-m", "rewritten first")
         rewritten = git(self.upstream, "rev-parse", "HEAD")
@@ -180,6 +200,18 @@ class SourceInstallScriptTests(unittest.TestCase):
         saved = SourceInstall.load(self.prefix)
         self.assertEqual((saved.data["commit"], saved.auto_update), (newer, True))
         self.assertEqual(saved.data["lock_files"], [f"requirements/{lock.name}" for lock in self.installer.locks()])
+
+    def test_install_starts_from_the_newest_release_not_the_tip_of_main(self):
+        released = commit(self.upstream, "README.md", "0.2.0\n", "release 0.2.0")
+        git(self.upstream, "tag", "v0.2.0")
+        commit(self.upstream, "README.md", "work in progress\n", "work")
+        with mock.patch("builtins.print"):
+            source = self.installer.prepare_source(self.prefix, str(self.upstream), "main")
+            self.assertEqual(git(source, "rev-parse", "HEAD"), released)
+            newer = commit(self.upstream, "README.md", "0.2.1\n", "release 0.2.1")
+            git(self.upstream, "tag", "v0.2.1")
+            self.installer.prepare_source(self.prefix, str(self.upstream), "main")  # running the script again
+        self.assertEqual(git(source, "rev-parse", "HEAD"), newer)
 
     def test_without_a_remote_the_folder_is_installed_as_is_and_no_record_remains(self):
         (self.prefix / CONFIG).write_text("{}", encoding="utf-8")
