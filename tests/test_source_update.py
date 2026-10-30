@@ -70,11 +70,13 @@ class SourceUpdateTests(unittest.TestCase):
         self.assertTrue(install.fetch())
         self.assertEqual((install.pending(), install.behind()), (second, 1))
         self.assertIn("1", SourceUpdates(install).state().message)
+        self.assertTrue(SourceUpdates(install).state().ready)  # Settings offers "Restart now"
         self.assertTrue(install.apply("python"))
         self.assertEqual(git(self.prefix / "source", "rev-parse", "HEAD"), second)
         self.assertEqual(self.pip.calls, [])
         reopened = self.install()
         self.assertEqual((reopened.data["commit"], reopened.pending(), reopened.apply("python")), (second, None, False))
+        self.assertFalse(SourceUpdates(reopened).state().ready)
 
     def test_changed_locks_reinstall_dependencies_and_a_failed_install_keeps_the_running_version(self):
         second = commit(self.upstream, "requirements/app.lock", "pywebview==6.3.0\n", "bump")
@@ -120,6 +122,7 @@ class SourceUpdateTests(unittest.TestCase):
         (self.prefix / "source/src/paperdesk/__init__.py").write_text("edited\n", encoding="utf-8")
         self.assertFalse(install.apply("python"))
         self.assertEqual(self.install().data["error"], "local_changes")
+        self.assertFalse(SourceUpdates(self.install()).state().ready)  # restarting would not apply it
         git(self.prefix / "source", "remote", "set-url", "origin", str(self.prefix / "missing"))
         self.assertFalse(self.install().fetch())
         self.assertEqual(self.install().data["error"], "local_changes")  # still needs the user, so it stays

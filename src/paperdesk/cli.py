@@ -66,6 +66,7 @@ def command_open(args: argparse.Namespace) -> int:
             if source.auto_update:
                 threading.Thread(target=source.fetch, name="paperdesk-source-fetch", daemon=True).start()
         shell = choose_shell(args.shell, app.platform, app.platform.webview_storage(app.paths.root), app.preferences)
+        restart = _restartable(app.updates, shell)
         try:
             server = create_server(app, "127.0.0.1", args.port)
         except OSError:
@@ -83,10 +84,21 @@ def command_open(args: argparse.Namespace) -> int:
         finally:
             server.shutdown()
             server.server_close()
-        return 0
+        return RELAUNCH if restart.is_set() else 0
 
 
-RELAUNCH = -1  # command_open: an update was applied; restart once this process no longer holds the library lock
+def _restartable(updates, shell) -> threading.Event:
+    """Settings → "Restart now": close the window, and main() starts the app again, which applies the update."""
+    restart = threading.Event()
+    if hasattr(shell, "close"):  # only the app window; the browser shell has nothing to close
+        def restart_now() -> None:
+            restart.set()
+            threading.Timer(0.3, shell.close).start()  # let the reply reach the page first
+        updates.allow_restart(restart_now)
+    return restart
+
+
+RELAUNCH = -1  # command_open: start again (an update was applied, or Settings asked) once the library lock is released
 
 
 def _relaunch() -> int:

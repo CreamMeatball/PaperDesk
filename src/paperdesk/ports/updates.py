@@ -11,6 +11,7 @@ class UpdateState:
     can_check: bool
     automatic_checks: bool = False
     message: str = ""
+    ready: bool = False  # an update is downloaded and applies when the app starts again
 
 
 class UpdateBackend(ABC):

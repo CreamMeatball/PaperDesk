@@ -77,6 +77,7 @@ class NativeWindowShell(DesktopShell):
         self.platform = platform
         self.storage = storage
         self.preferences = preferences
+        self.window = None
 
     @classmethod
     def is_available(cls) -> bool:
@@ -87,7 +88,7 @@ class NativeWindowShell(DesktopShell):
         webview.settings['ALLOW_DOWNLOADS'] = True
 
         self.storage.mkdir(parents=True, exist_ok=True)
-        window = webview.create_window(
+        window = self.window = webview.create_window(
             APP_NAME,
             url + ("&" if "?" in url else "?") + "shell=native",
             width=1360,
@@ -113,6 +114,11 @@ class NativeWindowShell(DesktopShell):
                     _macos_follow_theme(self.preferences)
 
         webview.start(func=started, menu=menu, private_mode=False, storage_path=str(self.storage), icon=icon)
+
+    def close(self) -> None:
+        """Close the window from any thread; run() then returns."""
+        if self.window is not None:
+            self.window.destroy()
 
 
 class BrowserShell(DesktopShell):

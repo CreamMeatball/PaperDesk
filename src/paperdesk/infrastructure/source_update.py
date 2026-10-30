@@ -211,7 +211,8 @@ class SourceUpdates(UpdateBackend):
     def state(self) -> UpdateState:
         if self.install.git is None:
             return UpdateState(False, False, message=_("git을 찾지 못해 자동 업데이트를 할 수 없어요. git을 설치한 뒤 설치 스크립트를 다시 실행해 주세요."))
-        return UpdateState(True, True, automatic_checks=self.install.auto_update, message=self.install.summary())
+        ready = self.install.data.get("error") != "local_changes" and self.install.pending() is not None
+        return UpdateState(True, True, automatic_checks=self.install.auto_update, message=self.install.summary(), ready=ready)
 
     def check(self) -> None:
         self.install.fetch(timeout=30)

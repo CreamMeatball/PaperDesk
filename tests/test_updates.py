@@ -30,10 +30,11 @@ class RecordingUpdates(UpdateBackend):
     def __init__(self):
         self.auto = False
         self.busy = False
+        self.ready = False
         self.checks = 0
 
     def state(self):
-        return UpdateState(True, not self.busy, self.auto)
+        return UpdateState(True, not self.busy, self.auto, ready=self.ready)
 
     def check(self):
         self.checks += 1
@@ -66,6 +67,43 @@ class UpdateTests(unittest.TestCase):
         for bad in ['yes', 1, None]:
             with self.assertRaises(InvalidInput):
                 service.configure(bad)
+
+    def test_restart_needs_a_downloaded_update_and_a_window_that_can_restart(self):
+        backend = RecordingUpdates()
+        service = UpdateService(backend)
+        backend.ready = True
+        self.assertFalse(service.view()['restart_ready'])  # the browser shell cannot restart itself
+        with self.assertRaises(InvalidInput):
+            service.restart()
+        restarted = []
+        service.allow_restart(lambda: restarted.append(True))
+        backend.ready = False
+        self.assertFalse(service.view()['restart_ready'])
+        with self.assertRaises(InvalidInput):
+            service.restart()
+        backend.ready = True
+        self.assertTrue(service.view()['restart_ready'])
+        self.assertEqual(service.restart(), {'restarting': True})
+        self.assertEqual(restarted, [True])
+
+    def test_restart_closes_the_window_and_open_starts_again(self):
+        from paperdesk import cli as commands
+        backend = RecordingUpdates()
+        backend.ready = True
+        service = UpdateService(backend)
+        window = mock.Mock()
+        restart = commands._restartable(service, window)
+        service.restart()
+        self.assertTrue(restart.is_set())
+        for _ in range(50):
+            if window.close.called:
+                break
+            threading.Event().wait(0.05)
+        window.close.assert_called_once_with()
+        browser = UpdateService(backend)
+        self.assertFalse(commands._restartable(browser, object()).is_set())
+        with self.assertRaises(InvalidInput):
+            browser.restart()
 
     def test_api_opens_native_ui_and_persists_user_choice_without_ai(self):
         app, tmp = build_app()

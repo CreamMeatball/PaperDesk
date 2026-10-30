@@ -82,6 +82,14 @@ export class SettingsView {
           catch (error) { toast(error.message, true); }
           finally { if (button.isConnected) button.disabled = false; }
         } }, t("업데이트 확인"))),
+      data && data.restart_ready ? h("div", { class: "field-row" }, h("div", { class: "k" }, t("새 버전 적용"),
+        h("small", null, t("앱을 다시 시작하면 받아 둔 새 버전이 적용돼요. 논문과 메모는 그대로예요."))),
+        h("button", { class: "btn primary", onclick: async function (event) {
+          var button = event.currentTarget;
+          button.disabled = true;
+          try { await self.app.api.post("/api/updates/restart"); toast(t("다시 시작하는 중…")); }  // the window closes and reopens
+          catch (error) { toast(error.message, true); button.disabled = false; }
+        } }, t("지금 다시 시작"))) : null,
       h("div", { class: "field-row" }, h("div", { class: "k" }, t("새 버전 자동 확인"),
         h("small", null, t("켜면 주기적으로 업데이트 서버에 연결해 새 버전을 확인해요."))), automatic));
   }

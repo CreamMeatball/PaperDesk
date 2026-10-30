@@ -1,6 +1,8 @@
 """Application updates. Source installs attach a git backend (infrastructure/source_update.py); otherwise the app says it cannot update itself."""
 from __future__ import annotations
 
+from typing import Callable
+
 from .. import __version__
 from ..domain.errors import InvalidInput, ProviderUnavailable
 from ..i18n import _, translate
@@ -21,14 +23,20 @@ class UnavailableUpdates(UpdateBackend):
 class UpdateService:
     def __init__(self, backend: UpdateBackend | None = None) -> None:
         self._backend = backend or UnavailableUpdates()
+        self._restart: Callable[[], None] | None = None
 
     def attach(self, backend: UpdateBackend) -> None:
         self._backend = backend
 
+    def allow_restart(self, restart: Callable[[], None]) -> None:
+        """The app window registers how to close and start again, so a downloaded update can apply right away."""
+        self._restart = restart
+
     def view(self, language: str = "ko") -> dict:
         state = self._backend.state()
         return {"version": __version__, "available": state.available, "can_check": state.can_check,
-                "automatic_checks": state.automatic_checks, "message": translate(state.message, language)}
+                "automatic_checks": state.automatic_checks, "message": translate(state.message, language),
+                "restart_ready": state.ready and self._restart is not None}
 
     def check(self) -> dict:
         state = self._backend.state()
@@ -39,6 +47,12 @@ class UpdateService:
         self._backend.check()
         # This means the native update window opened, not that this version is current.
         return {"opened": True}
+
+    def restart(self) -> dict:
+        if self._restart is None or not self._backend.state().ready:
+            raise InvalidInput(_("다시 시작해서 적용할 새 버전이 없어요."))
+        self._restart()
+        return {"restarting": True}
 
     def configure(self, automatic_checks: bool) -> None:
         if not isinstance(automatic_checks, bool):

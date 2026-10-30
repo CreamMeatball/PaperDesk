@@ -77,6 +77,7 @@ class ApiController:
             ("GET", "/api/diagnostics", self.diagnostics),
             ("GET", "/api/updates", self.update_status),
             ("POST", "/api/updates/check", self.check_updates),
+            ("POST", "/api/updates/restart", self.restart_for_update),
             ("PUT", "/api/updates/preferences", self.update_preferences_native),
         ]
         for method, pattern, handler in routes:
@@ -104,6 +105,9 @@ class ApiController:
 
     def check_updates(self, request: Request) -> Response:
         return Response.json(self.app.updates.check())
+
+    def restart_for_update(self, request: Request) -> Response:
+        return Response.json(self.app.updates.restart())
 
     def update_preferences_native(self, request: Request) -> Response:
         self.app.updates.configure(request.json().get("automatic_checks"))

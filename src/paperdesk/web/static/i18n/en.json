@@ -486,5 +486,10 @@
  "업데이트 서버(GitHub)에 연결하지 못했어요. 지금 버전({commit})으로 실행 중이에요.": "Could not connect to the update server (GitHub). Running the current version ({commit}).",
  "업데이트를 적용하지 못해 이전 버전({commit})으로 실행 중이에요. 다음에 앱을 열 때 다시 시도해요.": "The update could not be applied, so the previous version ({commit}) is running. It will be retried the next time you open the app.",
  "켜면 주기적으로 업데이트 서버에 연결해 새 버전을 확인해요.": "When enabled, the app periodically contacts the update server to check for new versions.",
- "이 설치에서는 앱 안에서 업데이트할 수 없어요. git으로 받은 저장소에서 설치 스크립트로 설치하면 자동 업데이트를 쓸 수 있어요.": "This installation can't update itself in the app. Install with the install script from a git clone to get automatic updates."
+ "이 설치에서는 앱 안에서 업데이트할 수 없어요. git으로 받은 저장소에서 설치 스크립트로 설치하면 자동 업데이트를 쓸 수 있어요.": "This installation can't update itself in the app. Install with the install script from a git clone to get automatic updates.",
+ "다시 시작하는 중…": "Restarting…",
+ "다시 시작해서 적용할 새 버전이 없어요.": "There is no downloaded version to apply by restarting.",
+ "새 버전 적용": "Apply new version",
+ "앱을 다시 시작하면 받아 둔 새 버전이 적용돼요. 논문과 메모는 그대로예요.": "Restart the app to apply the version already downloaded. Your papers and notes stay as they are.",
+ "지금 다시 시작": "Restart now"
 }
