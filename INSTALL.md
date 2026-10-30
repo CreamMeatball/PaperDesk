@@ -26,11 +26,7 @@ cd PaperDesk
 python3.12 scripts/install_source.py --auto-update
 ```
 
-Open the app:
-
-```sh
-~/.paperdesk-beta/venv/bin/python -m paperdesk
-```
+Open **Paperdesk (beta)** from Applications, Launchpad or Spotlight. From a terminal you can also run `~/.paperdesk-beta/venv/bin/python -m paperdesk`.
 
 ## Install on Windows (PowerShell or Command Prompt)
 
@@ -47,7 +43,7 @@ Open **Paperdesk (beta)** from the Start menu.
 - It creates a Python environment in `~/.paperdesk-beta` (macOS) or `%LOCALAPPDATA%\Programs\Paperdesk-beta` (Windows). Change this with `--prefix`.
 - It installs the same pinned packages as the release builds from `requirements/*.lock`. This is about 1.3 GB and takes several minutes.
 - It makes its own clone of the repository inside that folder and installs Paperdesk from it. The folder you cloned above is not used afterwards, and you can delete it.
-- On Windows it adds a Start menu shortcut.
+- It adds **Paperdesk (beta)** to Applications on macOS (to `~/Applications` if your account can't write to `/Applications`), or to the Start menu on Windows.
 - At the end it prints a summary: how to run Paperdesk, the MCP setup command, the update mode, and where your library is.
 
 **Updates.** `--auto-update` lets Paperdesk download new commits from GitHub in the background and apply them the next time it opens. Only the changed files are transferred, and packages are reinstalled only when the pinned versions change. If an update fails, Paperdesk keeps running the previous version.
@@ -92,7 +88,7 @@ On Windows, run the same command with the `python.exe` path shown above.
 
 ## Uninstall
 
-Run the install command again with `--uninstall`. This removes the environment, the clone and the shortcut, and keeps your library:
+Run the install command again with `--uninstall`. This removes the environment, the clone and the app or Start menu shortcut, and keeps your library:
 
 - macOS: `~/Library/Application Support/Paperdesk`
 - Windows: `%LOCALAPPDATA%\Paperdesk`

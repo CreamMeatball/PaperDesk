@@ -60,7 +60,6 @@ Paperdesk は macOS と Windows で論文を読むためのデスクトップア
 git clone --depth 1 https://github.com/HojooonKim/PaperDesk.git
 cd PaperDesk
 python3.12 scripts/install_source.py --auto-update
-~/.paperdesk-beta/venv/bin/python -m paperdesk
 ```
 
 **Windows**
@@ -71,7 +70,7 @@ cd PaperDesk
 py -3.12 scripts\install_source.py --auto-update
 ```
 
-インストール後、スタートメニューから **Paperdesk (beta)** を開きます。Python は [python.org](https://www.python.org/downloads/windows/) のものを使ってください。Windows 11 のスマート アプリ コントロールが uv や conda でインストールした Python をブロックすることがあります。
+インストール後、macOS では「アプリケーション」（Applications）から、Windows ではスタートメニューから **Paperdesk (beta)** を開きます。Windows では Python は [python.org](https://www.python.org/downloads/windows/) のものを使ってください。Windows 11 のスマート アプリ コントロールが uv や conda でインストールした Python をブロックすることがあります。
 
 `--auto-update` を付けると、新しいバージョンを GitHub からバックグラウンドで受け取り、次にアプリを開いたときに適用します。ライブラリはアプリとは別に保存されるので、更新やアンインストールをしても残ります。インストールの確認・アンインストール・トラブルシューティングは [INSTALL.md](INSTALL.md) を参照してください。
 

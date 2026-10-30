@@ -77,7 +77,6 @@ Switch the translation to **Over the original** to read it in place of each para
 git clone --depth 1 https://github.com/HojooonKim/PaperDesk.git
 cd PaperDesk
 python3.12 scripts/install_source.py --auto-update
-~/.paperdesk-beta/venv/bin/python -m paperdesk
 ```
 
 **Windows**
@@ -88,7 +87,7 @@ cd PaperDesk
 py -3.12 scripts\install_source.py --auto-update
 ```
 
-Then open **Paperdesk (beta)** from the Start menu. Use Python from [python.org](https://www.python.org/downloads/windows/): Windows 11 Smart App Control can block Python from uv or conda.
+Then open **Paperdesk (beta)** from Applications on macOS or from the Start menu on Windows. On Windows, use Python from [python.org](https://www.python.org/downloads/windows/): Windows 11 Smart App Control can block Python from uv or conda.
 
 **Updates.** With `--auto-update`, Paperdesk downloads new versions from GitHub in the background and applies them the next time it opens.
 

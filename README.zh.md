@@ -60,7 +60,6 @@ Paperdesk 是一款在 macOS 和 Windows 上阅读论文的桌面应用。它按
 git clone --depth 1 https://github.com/HojooonKim/PaperDesk.git
 cd PaperDesk
 python3.12 scripts/install_source.py --auto-update
-~/.paperdesk-beta/venv/bin/python -m paperdesk
 ```
 
 **Windows**
@@ -71,7 +70,7 @@ cd PaperDesk
 py -3.12 scripts\install_source.py --auto-update
 ```
 
-安装完成后，从开始菜单打开 **Paperdesk (beta)**。请使用 [python.org](https://www.python.org/downloads/windows/) 的 Python：Windows 11 的智能应用控制可能会拦截 uv 或 conda 安装的 Python。
+安装完成后，在 macOS 上从“应用程序”（Applications）、在 Windows 上从开始菜单打开 **Paperdesk (beta)**。Windows 上请使用 [python.org](https://www.python.org/downloads/windows/) 的 Python：Windows 11 的智能应用控制可能会拦截 uv 或 conda 安装的 Python。
 
 加上 `--auto-update` 后，Paperdesk 会在后台从 GitHub 下载新版本，并在下次打开时应用。论文库与应用分开保存，更新或卸载都不会删除。安装检查、卸载和问题排查见 [INSTALL.md](INSTALL.md)。
 

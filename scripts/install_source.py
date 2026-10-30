@@ -6,11 +6,11 @@
 
 Creates a separate Python environment with the same pinned packages as the release builds
 (native window and Docling analysis, about 1.3 GB), clones this repository's origin into the install
-folder and installs Paperdesk from that clone (editable) and, on Windows, adds a "Paperdesk (beta)"
-Start menu shortcut. With automatic updates on (asked once, or --auto-update), the app fetches new
-commits from GitHub in the background and applies them the next time it opens; running this script
-again also updates. --uninstall removes the environment, the clone and the shortcut. Your library
-(PDFs, notes, translations, settings) lives in a separate data folder and is never touched.
+folder and installs Paperdesk from that clone (editable), and adds "Paperdesk (beta)" to Applications
+(macOS) or the Start menu (Windows). With automatic updates on (asked once, or --auto-update), the app
+fetches new commits from GitHub in the background and applies them the next time it opens; running this
+script again also updates. --uninstall removes the environment, the clone and the app or shortcut. Your
+library (PDFs, notes, translations, settings) lives in a separate data folder and is never touched.
 
 On Windows use Python 3.12 from python.org: its python.exe is signed, so Smart App Control lets it
 run. Smart App Control blocks unsigned programs, including ones you build yourself.
@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import plistlib
+import shlex
 import shutil
 import stat
 import subprocess
@@ -32,6 +34,7 @@ MACOS = sys.platform == "darwin"
 PYTHON = (3, 12)  # the pinned window and Docling locks are resolved for Python 3.12
 MARKER = "paperdesk-source-install.txt"
 SHORTCUT = "Paperdesk (beta).lnk"
+APP_BUNDLE = "Paperdesk (beta).app"
 
 
 def default_prefix() -> Path:
@@ -92,6 +95,56 @@ def create_shortcut(prefix: Path, environment: Path) -> Path:
         "$s.Description = 'Paperdesk (beta, installed from source)'",
         "$s.Save()"]))
     return link
+
+
+def applications_folders() -> list[Path]:
+    # /Applications when this account may write there (an administrator), otherwise ~/Applications.
+    # Launchpad and Spotlight list both.
+    return [Path("/Applications"), Path.home() / "Applications"]
+
+
+def app_bundle_id() -> str:
+    sys.path.insert(0, str(ROOT / "src"))
+    from paperdesk import MAC_BUNDLE_ID
+
+    return MAC_BUNDLE_ID + ".source"  # not the packaged app's identifier, so the two never stand in for each other
+
+
+def remove_app_bundles() -> None:
+    for folder in applications_folders():
+        app = folder / APP_BUNDLE
+        try:
+            ours = plistlib.loads((app / "Contents" / "Info.plist").read_bytes()).get("CFBundleIdentifier") == app_bundle_id()
+        except (OSError, ValueError):
+            continue
+        if ours:
+            shutil.rmtree(app)
+
+
+def create_app_bundle(environment: Path) -> Path | None:
+    """A small macOS app that starts Paperdesk from this environment, so it opens like any other app."""
+    sys.path.insert(0, str(ROOT / "src"))
+    from paperdesk import APP_NAME, MAC_MINIMUM_VERSION
+
+    remove_app_bundles()
+    system, personal = applications_folders()
+    folder = system if os.access(system, os.W_OK) else personal
+    app = folder / APP_BUNDLE
+    if app.exists():
+        print(f"Not replacing {app}: this script did not create it.", file=sys.stderr)
+        return None
+    contents = app / "Contents"
+    (contents / "MacOS").mkdir(parents=True)
+    (contents / "Resources").mkdir()
+    shutil.copy2(ROOT / "packaging" / "macos" / "Paperdesk.icns", contents / "Resources" / "Paperdesk.icns")
+    (contents / "Info.plist").write_bytes(plistlib.dumps({
+        "CFBundleName": APP_NAME, "CFBundleDisplayName": app.stem, "CFBundleIdentifier": app_bundle_id(),
+        "CFBundleExecutable": APP_NAME, "CFBundleIconFile": "Paperdesk.icns", "CFBundlePackageType": "APPL",
+        "LSMinimumSystemVersion": MAC_MINIMUM_VERSION, "NSHighResolutionCapable": True}))
+    launcher = contents / "MacOS" / APP_NAME
+    launcher.write_text(f"#!/bin/sh\nexec {shlex.quote(str(environment_python(environment)))} -m paperdesk\n", encoding="utf-8")
+    launcher.chmod(0o755)
+    return app
 
 
 def data_folder() -> Path:
@@ -225,7 +278,10 @@ def install(prefix: Path, *, url: str | None = None, branch: str = "main", auto_
         print(f"  Start menu:  {create_shortcut(prefix, environment).stem}")
         print(f"  or run:      \"{environment_python(environment, window=True)}\" -m paperdesk")
     else:
-        print(f"  Run:         {python} -m paperdesk")
+        app = create_app_bundle(environment)
+        if app:
+            print(f"  Open:        {app.stem} in {app.parent}")
+        print(f"  or run:      {python} -m paperdesk")
     print(f"  MCP setup:   \"{python}\" -m paperdesk mcp-config claude   (or codex)")
     if automatic:
         print(f"  Update:      automatic; new commits from GitHub apply the next time Paperdesk opens (Settings to turn off)")
@@ -247,6 +303,8 @@ def _remove_read_only(function, path, _error) -> None:
 def uninstall(prefix: Path) -> None:
     if WINDOWS:
         shortcut_path().unlink(missing_ok=True)
+    if MACOS:
+        remove_app_bundles()
     if prefix.exists():
         if not (prefix / MARKER).is_file():
             raise SystemExit(f"{prefix} was not created by this script; not removing it.")

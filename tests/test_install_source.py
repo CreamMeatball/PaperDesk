@@ -1,4 +1,5 @@
 import os
+import plistlib
 import stat
 import tempfile
 import unittest
@@ -43,8 +44,33 @@ class SourceInstallTests(unittest.TestCase):
             self.assertFalse(self.installer.matching_environment(environment))
             self.assertFalse(self.installer.matching_environment(environment/'missing'))
 
+    @unittest.skipIf(os.name == 'nt', 'macOS app bundle with POSIX paths')
+    def test_macos_app_opens_the_environment_and_only_its_own_copy_is_removed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            system, personal = Path(folder)/'Applications', Path(folder)/'home-Applications'
+            system.mkdir()
+            with mock.patch.object(self.installer, 'applications_folders', return_value=[system, personal]):
+                app = self.installer.create_app_bundle(Path('/opt/Paper desk/venv'))
+                self.assertEqual(app, system/'Paperdesk (beta).app')
+                info = plistlib.loads((app/'Contents/Info.plist').read_bytes())
+                self.assertEqual((info['CFBundleExecutable'], info['CFBundleIdentifier']), ('Paperdesk', 'org.paperdesk.Paperdesk.source'))
+                self.assertTrue((app/'Contents/Resources'/info['CFBundleIconFile']).is_file())
+                launcher = app/'Contents/MacOS/Paperdesk'
+                self.assertEqual(launcher.read_text(encoding='utf-8'), "#!/bin/sh\nexec '/opt/Paper desk/venv/bin/python' -m paperdesk\n")
+                self.assertTrue(os.access(launcher, os.X_OK))
+                self.assertEqual(self.installer.create_app_bundle(Path('/opt/Paper desk/venv')), app)  # reinstalling replaces it
+                self.installer.remove_app_bundles()
+                self.assertFalse(app.exists())
+                # Someone else's app with the same name is never replaced or removed.
+                (app/'Contents').mkdir(parents=True)
+                (app/'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier': 'example.other'}))
+                with mock.patch('sys.stderr'):
+                    self.assertIsNone(self.installer.create_app_bundle(Path('venv')))
+                self.installer.remove_app_bundles()
+                self.assertTrue(app.exists())
+
     def test_uninstall_never_removes_a_folder_it_did_not_create(self):
-        with tempfile.TemporaryDirectory() as folder, mock.patch.object(self.installer, 'WINDOWS', False), \
+        with tempfile.TemporaryDirectory() as folder, mock.patch.multiple(self.installer, WINDOWS=False, MACOS=False), \
                 mock.patch.object(self.installer, 'data_folder', return_value=Path('library')):
             mine, other = Path(folder)/'mine', Path(folder)/'other'
             for path in (mine, other):
