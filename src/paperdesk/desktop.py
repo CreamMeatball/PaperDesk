@@ -11,6 +11,7 @@ from urllib.parse import urljoin
 
 from . import APP_NAME
 from .platforms import Platform
+from .services.app_state import PreferenceService
 
 
 class DesktopShell(ABC):
@@ -48,16 +49,22 @@ def _macos_app_name() -> None:
     (bundle.localizedInfoDictionary() or bundle.infoDictionary())["CFBundleName"] = APP_NAME
 
 
-class MacWindowTheme:
-    """window.pywebview.api for the page. macOS draws the translucent backdrop behind the page and follows the
-    system appearance, so a light theme on a dark system sat on a black backdrop; the page reports its theme."""
+def _macos_appearance(theme: str) -> None:
+    # macOS draws the title bar and the translucent backdrop behind the page, and they follow the app's appearance:
+    # left to the system, the light theme on a dark system sat in a black frame. Main thread only.
+    from AppKit import NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication
 
-    def theme(self, choice: str) -> None:
-        from AppKit import NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication
-        from PyObjCTools.AppHelper import callAfter
+    name = {"light": NSAppearanceNameAqua, "dark": NSAppearanceNameDarkAqua}.get(theme)  # "system": follow macOS
+    NSApplication.sharedApplication().setAppearance_(NSAppearance.appearanceNamed_(name) if name else None)
 
-        name = {"light": NSAppearanceNameAqua, "dark": NSAppearanceNameDarkAqua}.get(choice)  # "system": follow macOS
-        callAfter(lambda: NSApplication.sharedApplication().setAppearance_(NSAppearance.appearanceNamed_(name) if name else None))
+
+def _macos_follow_theme(preferences: PreferenceService) -> None:
+    # The theme is saved by the page; pywebview's JS bridge cannot run under the app's Content-Security-Policy.
+    # Called once the app is running: AppKit resets an appearance set while it is still launching.
+    from PyObjCTools.AppHelper import callAfter
+
+    callAfter(_macos_appearance, preferences.all()["theme"])
+    preferences.watch(lambda values: "theme" in values and callAfter(_macos_appearance, values["theme"]))
 
 
 class NativeWindowShell(DesktopShell):
@@ -66,9 +73,10 @@ class NativeWindowShell(DesktopShell):
     name = "native"
     blocks = True
 
-    def __init__(self, platform: Platform, storage: Path) -> None:
+    def __init__(self, platform: Platform, storage: Path, preferences: PreferenceService | None = None) -> None:
         self.platform = platform
         self.storage = storage
+        self.preferences = preferences
 
     @classmethod
     def is_available(cls) -> bool:
@@ -88,7 +96,6 @@ class NativeWindowShell(DesktopShell):
             frameless=False,
             resizable=True,
             text_select=True,  # pywebview disables selection by default; readers need it
-            js_api=MacWindowTheme() if self.platform.name == "macos" else None,
             **self.platform.window_options(),
         )
         menu, icon = [], None
@@ -102,6 +109,8 @@ class NativeWindowShell(DesktopShell):
             if self.platform.name == "macos":
                 from PyObjCTools.AppHelper import callAfter
                 callAfter(_macos_settings_shortcut)
+                if self.preferences is not None:
+                    _macos_follow_theme(self.preferences)
 
         webview.start(func=started, menu=menu, private_mode=False, storage_path=str(self.storage), icon=icon)
 
@@ -120,9 +129,9 @@ class BrowserShell(DesktopShell):
         webbrowser.open(url)
 
 
-def choose_shell(preference: str, platform: Platform, storage: Path) -> DesktopShell:
+def choose_shell(preference: str, platform: Platform, storage: Path, preferences: PreferenceService | None = None) -> DesktopShell:
     if preference in ("auto", "native") and NativeWindowShell.is_available():
-        return NativeWindowShell(platform, storage)
+        return NativeWindowShell(platform, storage, preferences)
     if preference == "native":
         raise RuntimeError("네이티브 창에 필요한 pywebview가 설치되어 있지 않아요.")
     return BrowserShell()

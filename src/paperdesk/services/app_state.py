@@ -49,6 +49,11 @@ PREFERENCES: dict[str, tuple[Any, Callable[[Any], bool]]] = {
 class PreferenceService:
     def __init__(self, repository: PreferenceRepository) -> None:
         self._repository = repository
+        self._watchers: list[Callable[[dict], None]] = []
+
+    def watch(self, watcher: Callable[[dict], None]) -> None:
+        """Called with the saved values after every change (the native window follows the theme this way)."""
+        self._watchers.append(watcher)
 
     def all(self) -> dict:
         stored = self._repository.all()
@@ -63,6 +68,8 @@ class PreferenceService:
                 raise InvalidInput(_("화면 설정 값이 올바르지 않아요: {key}", key=str(key)[:40]))
         if values:
             self._repository.put_many(values, only_missing=only_missing)
+            for watcher in self._watchers:
+                watcher(values)
         return self.all()
 
 

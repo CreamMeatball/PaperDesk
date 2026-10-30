@@ -36,7 +36,7 @@ export class SettingsView {
     if (!this.open.size && data.provider) this.open.add(data.provider);
     var updates = null;
     try { updates = await app.api.get("/api/updates"); } catch (error) { updates = null; }
-    this.inner.replaceChildren(
+    this.inner.replaceChildren(...[
       h("h2", null, t("설정")),
       h("p", { class: "lead" }, t("모든 논문과 설정은 이 컴퓨터에만 저장돼요. API 키는 macOS 키체인에 보관해요.")),
       h("p", { class: "lead" }, t("클라우드 AI를 사용하면 선택한 본문·주변 문맥·그림이 해당 AI 제공자에게 전송돼요. 자동으로 다른 유료 연결로 바꾸지 않아요.")),
@@ -58,7 +58,8 @@ export class SettingsView {
       h("h3", null, t("백업·복원")), this.backupSection(),
       h("h3", null, t("지원 범위·개인정보")),
       h("p", { class: "lead" }, t("Mac 베타는 Apple Silicon을 대상으로 해요. 텍스트 PDF 읽기를 지원하며 스캔 문서 OCR과 암호화 PDF는 지원하지 않아요. AI 번역은 원문·수식·인용과 함께 확인해 주세요.")),
-      h("a", { class: "btn", href: "/api/diagnostics", download: "Paperdesk-diagnostics.json" }, t("내용 없는 진단 정보 저장")));
+      h("a", { class: "btn", href: "/api/diagnostics", download: "Paperdesk-diagnostics.json" }, t("내용 없는 진단 정보 저장"))
+    ].filter(Boolean));  // the login-check box is absent once an AI connection works
   }
 
   updateSection(data) {

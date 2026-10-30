@@ -65,7 +65,7 @@ def command_open(args: argparse.Namespace) -> int:
             app.updates.attach(SourceUpdates(source))
             if source.auto_update:
                 threading.Thread(target=source.fetch, name="paperdesk-source-fetch", daemon=True).start()
-        shell = choose_shell(args.shell, app.platform, app.platform.webview_storage(app.paths.root))
+        shell = choose_shell(args.shell, app.platform, app.platform.webview_storage(app.paths.root), app.preferences)
         try:
             server = create_server(app, "127.0.0.1", args.port)
         except OSError:
