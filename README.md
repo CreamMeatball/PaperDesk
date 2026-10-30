@@ -18,7 +18,23 @@ Paperdesk is a desktop app for reading research papers on macOS and Windows.
 
 Your papers and notes stay on your computer.
 
-> **Beta.** For now Paperdesk is installed from source with a single script. See [Install](#install).
+> **Beta.** Paperdesk is installed from source for now. The quickest way is to let Claude Code or Codex do it.
+
+## Install in one command
+
+If you use [Claude Code](https://claude.com/claude-code) or [Codex](https://github.com/openai/codex), run one of these in a terminal:
+
+```sh
+claude "Install Paperdesk on this computer by following https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md"
+```
+
+```sh
+codex "Install Paperdesk on this computer by following https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md"
+```
+
+The agent follows [INSTALL.md](INSTALL.md). It checks your computer and asks before installing anything system-wide, such as Python 3.12 or git. At the end it tells you how to open Paperdesk and what is left to set up. It never handles your sign-ins or API keys.
+
+With another coding agent, paste the text in quotes. To install by hand, see [Install](#install).
 
 ## Highlights
 
@@ -92,19 +108,6 @@ Then open **Paperdesk (beta)** from Applications on macOS or from the Start menu
 **Updates.** With `--auto-update`, Paperdesk downloads new versions from GitHub in the background and applies them the next time it opens.
 
 **Your library** is stored separately from the app, and is kept when you update or uninstall. For checks, uninstalling and troubleshooting, see [INSTALL.md](INSTALL.md).
-
-### Let an AI agent install it
-
-Paste this into Claude Code, Codex or another coding agent:
-
-```text
-Install Paperdesk on this computer by following
-https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md step by step.
-Ask me before installing anything system-wide, and when you are done,
-tell me how to open it and what I still need to set up.
-```
-
-INSTALL.md has a section written for agents. It covers what to check first, what to ask you, and how to verify the install. Agents are told never to handle your sign-ins or API keys.
 
 ## Connect an AI
 

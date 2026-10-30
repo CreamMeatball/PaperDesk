@@ -12,7 +12,23 @@
 
 Paperdesk 是一款在 macOS 和 Windows 上阅读论文的桌面应用。它按主题文件夹整理论文 PDF，把整篇论文翻译在原文旁边，选中任何内容都能直接问你已经在用的 AI。论文和记录都只保存在你自己的电脑上。
 
-> **测试版**：目前通过一个脚本从源码安装，详见[安装](#安装)。
+> **测试版**：目前从源码安装，交给 Claude Code 或 Codex 最省事。
+
+## 一条命令安装
+
+如果你在用 [Claude Code](https://claude.com/claude-code) 或 [Codex](https://github.com/openai/codex)，在终端运行下面任意一条：
+
+```sh
+claude "按照 https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md 在这台电脑上安装 Paperdesk"
+```
+
+```sh
+codex "按照 https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md 在这台电脑上安装 Paperdesk"
+```
+
+代理会按照 [INSTALL.md](INSTALL.md) 检查你的电脑。在系统范围安装任何东西（例如 Python 3.12 或 git）之前，它会先征求你的同意；最后告诉你怎么打开 Paperdesk、还需要设置什么。它不会经手你的登录信息或 API 密钥。
+
+使用其他编程代理时，粘贴引号里的文字即可。想手动安装，请看[安装](#安装)。
 
 ## 主要功能
 
@@ -73,19 +89,6 @@ py -3.12 scripts\install_source.py --auto-update
 安装完成后，在 macOS 上从“应用程序”（Applications）、在 Windows 上从开始菜单打开 **Paperdesk (beta)**。Windows 上请使用 [python.org](https://www.python.org/downloads/windows/) 的 Python：Windows 11 的智能应用控制可能会拦截 uv 或 conda 安装的 Python。
 
 加上 `--auto-update` 后，Paperdesk 会在后台从 GitHub 下载新版本，并在下次打开时应用。论文库与应用分开保存，更新或卸载都不会删除。安装检查、卸载和问题排查见 [INSTALL.md](INSTALL.md)。
-
-### 让 AI 代理帮你安装
-
-把下面的内容粘贴给 Claude Code、Codex 等编程代理：
-
-```text
-请在这台电脑上安装 Paperdesk。
-按照 https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md 一步一步操作，
-在系统范围内安装任何东西之前先问我。
-完成后告诉我怎么打开它，以及我还需要设置什么。
-```
-
-INSTALL.md 中有专门写给代理的一节，规定了要先检查什么、要问你什么、如何确认安装成功。代理不会经手你的登录信息或 API 密钥。
 
 ## 连接 AI
 
