@@ -40,6 +40,17 @@ class ReaderUIRegressionTests(unittest.TestCase):
         # Started by python, the Dock and app menu would otherwise say "Python" with Python's icon.
         self.assertEqual(info['CFBundleName'], 'Paperdesk')
         self.assertEqual(Path(options['icon']).name, 'Paperdesk.icns')
+        # The page reports its theme so the macOS backdrop matches it; "system" follows macOS again.
+        api = webview.create_window.call_args.kwargs['js_api']
+        app = Mock()
+        appkit = types.SimpleNamespace(NSApplication=types.SimpleNamespace(sharedApplication=lambda: app),
+                                       NSAppearance=types.SimpleNamespace(appearanceNamed_=lambda name: 'appearance:' + name),
+                                       NSAppearanceNameAqua='Aqua', NSAppearanceNameDarkAqua='DarkAqua')
+        with patch.dict('sys.modules', {'AppKit': appkit, 'PyObjCTools': types.SimpleNamespace(),
+                                        'PyObjCTools.AppHelper': types.SimpleNamespace(callAfter=lambda function: function())}):
+            for choice, expected in (('light', 'appearance:Aqua'), ('dark', 'appearance:DarkAqua'), ('system', None)):
+                api.theme(choice)
+                app.setAppearance_.assert_called_with(expected)
         self.assertEqual(options['menu'][0].title,'__app__')
         action = options['menu'][0].items[0]
         self.assertEqual(action.title,'Settings…')

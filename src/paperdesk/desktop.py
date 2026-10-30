@@ -48,6 +48,18 @@ def _macos_app_name() -> None:
     (bundle.localizedInfoDictionary() or bundle.infoDictionary())["CFBundleName"] = APP_NAME
 
 
+class MacWindowTheme:
+    """window.pywebview.api for the page. macOS draws the translucent backdrop behind the page and follows the
+    system appearance, so a light theme on a dark system sat on a black backdrop; the page reports its theme."""
+
+    def theme(self, choice: str) -> None:
+        from AppKit import NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication
+        from PyObjCTools.AppHelper import callAfter
+
+        name = {"light": NSAppearanceNameAqua, "dark": NSAppearanceNameDarkAqua}.get(choice)  # "system": follow macOS
+        callAfter(lambda: NSApplication.sharedApplication().setAppearance_(NSAppearance.appearanceNamed_(name) if name else None))
+
+
 class NativeWindowShell(DesktopShell):
     """pywebview: WKWebView on macOS (and Edge WebView2 on Windows later), with the platform's translucency."""
 
@@ -76,6 +88,7 @@ class NativeWindowShell(DesktopShell):
             frameless=False,
             resizable=True,
             text_select=True,  # pywebview disables selection by default; readers need it
+            js_api=MacWindowTheme() if self.platform.name == "macos" else None,
             **self.platform.window_options(),
         )
         menu, icon = [], None

@@ -8,9 +8,16 @@
     var dark = choice === "dark" || (choice === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
     root.dataset.themeChoice = choice;
     root.dataset.theme = dark ? "dark" : "light";
+    native();
+  }
+  // macOS window: the translucent backdrop behind the page is drawn by the system, so it is told the theme too.
+  function native() {
+    var api = window.pywebview && window.pywebview.api;
+    if (api && api.theme) api.theme(choice);
   }
   apply();
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", apply);
+  window.addEventListener("pywebviewready", native);
   window.paperdeskTheme = {
     get: function () { return choice; },
     set: function (value) {
