@@ -92,7 +92,7 @@ PDF 읽기, 그림·참고문헌 미리보기, 저장된 번역·대화·메모 
 
 1. 테스트 통과를 확인합니다(`PYTHONPATH=src python3 -m unittest discover -s tests -t .`, `node --test tests/js/reader_ui.mjs`, `python3 scripts/i18n.py check`).
 2. `__version__`을 올리고 [CHANGELOG.md](../CHANGELOG.md) 맨 위에 그 버전의 추가(Added)·변경(Changed)·수정(Fixed)을 적어 `Release X.Y.Z`로 커밋합니다.
-3. 그 커밋에 주석 태그를 붙이고 main과 함께 올립니다.
+3. 그 커밋에 주석 태그를 붙이고 main과 함께 올립니다. 태그는 항상 최신 main 커밋에, 이전 태그보다 큰 번호로 붙입니다. 업데이트는 가장 높은 번호의 태그를 따라가므로, 오래된 커밋에 높은 번호를 붙이면 그 뒤에 낸 낮은 번호는 설치본에 전달되지 않습니다.
 
    ```sh
    git tag -a vX.Y.Z -m "Paperdesk X.Y.Z"
