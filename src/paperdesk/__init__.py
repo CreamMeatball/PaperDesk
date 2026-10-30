@@ -3,7 +3,7 @@
 APP_NAME is the display name. Persistent identifiers must never follow a branding change.
 """
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 APP_NAME = "PaperDesk"
 APP_ID = "paperdesk"
 MAC_BUNDLE_ID = "org.paperdesk.Paperdesk"

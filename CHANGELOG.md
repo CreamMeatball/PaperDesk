@@ -4,6 +4,29 @@ Versions follow [Semantic Versioning](https://semver.org/): new features raise t
 third. Before 1.0.0, the first official release, the first number stays 0. The rule and the release steps are in
 [docs/development.md](docs/development.md) (in Korean).
 
+## 0.3.0 — 2026-10-30
+
+### Added
+
+- With automatic translation enabled, importing a PDF now starts analysis and translation in the background,
+  without first opening it in the reader. Page text is also saved for search and MCP.
+
+### Changed
+
+- The translation menu now shows actions appropriate to the current page and job state, including stopping,
+  resuming and translating remaining text.
+
+### Fixed
+
+- **Windows:** the native window uses the PaperDesk icon and its own taskbar app identity instead of Python's.
+- Background translation and the reader no longer queue the same paragraph twice for the same language.
+- The source installer writes UTF-8 output when piped or saved to a file on Windows.
+
+### Known issues
+
+- A blank window has been reported on Windows with 0.2.1. It has not been reproduced on the test PC;
+  this release does not claim to fix it.
+
 ## 0.2.1 — 2026-10-30
 
 ### Changed
