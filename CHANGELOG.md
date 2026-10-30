@@ -4,7 +4,7 @@ Versions follow [Semantic Versioning](https://semver.org/): new features raise t
 third. Before 1.0.0, the first official release, the first number stays 0. The rule and the release steps are in
 [docs/development.md](docs/development.md) (in Korean).
 
-## Unreleased
+## 0.2.1 — 2026-10-30
 
 ### Changed
 
