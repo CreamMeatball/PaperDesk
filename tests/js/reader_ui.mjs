@@ -330,3 +330,20 @@ test('inline math highlights as one box per line at the body text height',async(
   assert.deepEqual(lineRects(rects),[[.10,.100,.48,.120],[.10,.125,.20,.145]]);
   assert.deepEqual(lineRects([[.1,.1,.2,.12],[.6,.1,.7,.12]]),[[.1,.1,.2,.12],[.6,.1,.7,.12]]);
 });
+test('the translation menu offers only what fits the current state',()=>{
+  const c=Object.create(TranslationController.prototype);
+  const blocks=[1,2,3].map(n=>({key:'1:'+n,translatable:true}));
+  Object.assign(c,{reader:{tmode:'side',current:1,analysis:{blocks,pages:[{blocks}]}},language:'Korean',store:{},pending:new Set(),jobs:[],running:false});
+  const labels=()=>c.menuItems().filter(item=>item!=='-').map(item=>item.label||item.title).slice(4);
+  assert.deepEqual(labels(),['현재 쪽 번역','목차에서 골라 번역…','남은 본문 전체 번역 (3문단)']);
+  // Running a job for the whole paper: nothing to start again, nothing to redo; only stopping.
+  c.running=true;c.pending=new Set(blocks.map(b=>b.key));c.store={'1:1':{}};c.pending.delete('1:1');
+  c.jobs=[{language:'Korean',state:'running',completed:1,total:3}];
+  assert.deepEqual(labels(),['번역 멈추기']);
+  // Interrupted: resume or cancel it, or start over on what is left.
+  c.running=false;c.pending=new Set();c.jobs=[{id:'j',language:'Korean',state:'paused',completed:1,total:3}];
+  assert.deepEqual(labels(),['중단된 번역 재개 (1/3)','중단 작업 취소','현재 쪽 번역','목차에서 골라 번역…','새 분석으로 남은 본문 번역…','현재 쪽 다시 번역…']);
+  // Everything translated.
+  c.jobs=[{language:'Korean',state:'completed',completed:3,total:3}];c.store={'1:1':{},'1:2':{},'1:3':{}};
+  assert.deepEqual(labels(),['전체 번역 완료','현재 쪽 다시 번역…']);
+});

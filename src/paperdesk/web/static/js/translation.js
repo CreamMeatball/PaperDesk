@@ -91,33 +91,39 @@ export class TranslationController {
   }
 
   // ---------- menu ----------
-  openMenu(anchor) {
-    var self = this, reader = this.reader, ready = !!this.analysis;
-    var all = ready ? this.analysis.blocks.filter(function (b) { return b.translatable && !self.store[b.key]; }) : [];
+  openMenu(anchor) { menuAt(anchor, this.menuItems()); }
+
+  menuItems() {
+    var self = this, reader = this.reader;
     var items = [{ title: t("번역 보기") }];
     MODES.forEach(function (mode) {
       items.push({ label: (reader.tmode === mode[0] ? "✓ " : "   ") + t(mode[1]), onClick: function () { reader.setTranslationMode(mode[0]); } });
     });
     items.push("-");
-    if (!ready) items.push({ title: t("문서를 분석하는 중이에요…") });
-    else {
-      items.push({ label: t("현재 쪽 번역"), icon: "file", onClick: function () { self.translatePage(reader.current); } });
+    if (!this.analysis) { items.push({ title: t("문서를 분석하는 중이에요…") }); return items; }
+    // Only what can be done now: queued paragraphs are not offered again, nothing is redone while a job runs.
+    function open(b) { return !self.store[b.key] && !self.pending.has(b.key); }
+    var remaining = this.analysis.blocks.filter(function (b) { return b.translatable && open(b); });
+    var page = this.blocksOn(reader.current);
+    var mine = this.jobs.filter(function (job) { return job.language === self.language; });
+    var interrupted = mine.some(function (job) { return job.state === "failed" || job.state === "paused" || job.state === "cancelled"; });
+    if (this.running) items.push({ label: t("번역 멈추기"), icon: "close", onClick: function () { self.cancelJobs(); } });
+    mine.filter(function (job) { return job.state === "paused" || job.state === "failed"; }).forEach(function (job) {
+      items.push({ label: t("중단된 번역 재개 ({done}/{total})", { done: job.completed, total: job.total }), onClick: function () { self.resumeJob(job); } });
+      items.push({ label: t("중단 작업 취소"), onClick: async function () {
+        await self.app.api.post("/api/translation-jobs/" + job.id + "/cancel"); await self.pollJobs();
+      } });
+    });
+    if (page.some(open)) items.push({ label: t("현재 쪽 번역"), icon: "file", onClick: function () { self.translatePage(reader.current); } });
+    if (remaining.length) {
       items.push({ label: t("목차에서 골라 번역…"), icon: "list", onClick: function () { reader.nav.open("sections"); } });
-      items.push({ label: all.length ? t("남은 본문 전체 번역 ({n}문단)", { n: all.length }) : t("전체 번역 완료"), icon: "translate",
-        onClick: function () { if (all.length) self.translateAll(all); } });
-      if (this.running) items.push({ label: t("번역 멈추기"), icon: "close", onClick: function () { self.cancelJobs(); } });
-      this.jobs.filter(function (job) { return job.state === "paused" || job.state === "failed"; }).forEach(function (job) {
-        items.push({ label: t("중단된 번역 재개 ({done}/{total})", { done: job.completed, total: job.total }), onClick: function () { self.resumeJob(job); } });
-        items.push({ label: t("중단 작업 취소"), onClick: async function () {
-          await self.app.api.post("/api/translation-jobs/" + job.id + "/cancel"); await self.pollJobs();
-        } });
-      });
-      if (this.jobs.some(function (job) { return job.language === self.language && (job.state === "failed" || job.state === "paused" || job.state === "cancelled"); })) {
-        items.push({ label: t("새 분석으로 남은 본문 번역…"), icon: "translate", onClick: function () { self.translateAll(all); } });
-      }
+      items.push({ label: interrupted ? t("새 분석으로 남은 본문 번역…") : t("남은 본문 전체 번역 ({n}문단)", { n: remaining.length }),
+        icon: "translate", onClick: function () { self.translateAll(remaining); } });
+    } else if (!this.running && !this.pending.size) items.push({ title: t("전체 번역 완료") });
+    if (!this.running && page.some(function (b) { return self.store[b.key]; })) {
       items.push({ label: t("현재 쪽 다시 번역…"), onClick: function () { self.retranslatePage(); } });
     }
-    menuAt(anchor, items);
+    return items;
   }
 
   updateLabel() {
