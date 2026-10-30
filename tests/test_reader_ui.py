@@ -5,13 +5,22 @@ import unittest
 import types
 from unittest.mock import Mock, patch
 from paperdesk.desktop import NativeWindowShell, _macos_settings_shortcut
-from paperdesk.platforms import MacPlatform
+from paperdesk.platforms import MacPlatform, WindowsPlatform
 from .helpers import build_app
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
 class ReaderUIRegressionTests(unittest.TestCase):
+    def test_windows_window_uses_paperdesk_icon_and_taskbar_identity(self):
+        webview = types.SimpleNamespace(settings={}, create_window=Mock(), start=Mock())
+        with tempfile.TemporaryDirectory() as directory, patch.dict('sys.modules', {'webview': webview}), \
+                patch('paperdesk.desktop._windows_app_identity') as identity:
+            NativeWindowShell(WindowsPlatform(), Path(directory)).run('http://127.0.0.1:1234/')
+        identity.assert_called_once_with()
+        self.assertTrue(Path(webview.start.call_args.kwargs['icon']).is_file())
+        self.assertEqual(Path(webview.start.call_args.kwargs['icon']).suffix, '.ico')
+
     @unittest.skipUnless(shutil.which('node'), 'Node.js is needed for the reader regression suite')
     def test_reader_interactions(self):
         with tempfile.TemporaryDirectory() as directory:

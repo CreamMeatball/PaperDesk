@@ -38,6 +38,14 @@ def _macos_settings_shortcut() -> None:
 
 
 MAC_ICON = Path(__file__).resolve().parents[2] / "packaging" / "macos" / "Paperdesk.icns"  # present in source installs
+WINDOWS_ICON = Path(__file__).resolve().parents[2] / "packaging" / "windows" / "Paperdesk.ico"
+
+
+def _windows_app_identity() -> None:
+    # Source installs run pythonw.exe. Give the taskbar our identity instead of grouping with Python.
+    import ctypes
+
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("org.paperdesk.Paperdesk.source")
 
 
 def _macos_app_name() -> None:
@@ -86,6 +94,8 @@ class NativeWindowShell(DesktopShell):
     def run(self, url: str) -> None:
         import webview  # optional dependency, imported only when a window is requested
         webview.settings['ALLOW_DOWNLOADS'] = True
+        if self.platform.name == "windows":
+            _windows_app_identity()
 
         self.storage.mkdir(parents=True, exist_ok=True)
         window = self.window = webview.create_window(
@@ -100,6 +110,8 @@ class NativeWindowShell(DesktopShell):
             **self.platform.window_options(),
         )
         menu, icon = [], None
+        if self.platform.name == "windows":
+            icon = str(WINDOWS_ICON) if WINDOWS_ICON.is_file() else None
         if self.platform.name == "macos":
             from webview.menu import Menu, MenuAction
             menu = [Menu("__app__", [MenuAction("Settings…", lambda: window.load_url(urljoin(url, "/settings?shell=native")))])]
