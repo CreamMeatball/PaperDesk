@@ -7,9 +7,11 @@ import urllib.request
 from pathlib import Path
 
 from paperdesk.i18n import _, from_header, translate
+from paperdesk.ports.ai import CommandResult
 from paperdesk.web.server import create_server
 
 from .helpers import build_app
+from .test_providers import FakeHttp, FakeRunner
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("i18n_tool", ROOT / "scripts" / "i18n.py")
@@ -40,7 +42,9 @@ class CatalogTests(unittest.TestCase):
 class ServerLanguageTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app, cls.tmp = build_app()
+        # Fake AI connections: /api/settings otherwise probes the machine's real CLIs and local servers,
+        # which took 15 s on one Windows PC and overran the request timeout.
+        cls.app, cls.tmp = build_app(runner=FakeRunner(CommandResult(0, "OK", "")), http=FakeHttp(get={"data": []}))
         cls.server = create_server(cls.app, "127.0.0.1", 0)
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
         cls.base = cls.server.url.rstrip("/")
