@@ -91,6 +91,25 @@ class JobTests(unittest.TestCase):
         self.assertEqual(len(calls),1)
         self.assertEqual(calls[0],('Korean','demo'))
 
+    def test_paragraphs_already_waiting_in_a_job_are_not_queued_again(self):
+        # The reader and the background translation after an import can both ask for the same paper.
+        entered, release = threading.Event(), threading.Event()
+        def translate(doc_id,payload,blocks):
+            entered.set(); release.wait(3)
+            return {'missing':[]}
+        self.app.jobs.translate=translate
+        self.addCleanup(release.set)
+        block=lambda i:{'key':f'1:abcd{i}','sentences':['Sentence.']}
+        first=self.app.jobs.create(self.doc.id,{'blocks':[block(i) for i in range(12)],'title':'From the reader'})
+        self.assertTrue(entered.wait(2))
+        second=self.app.jobs.create(self.doc.id,{'blocks':[block(i) for i in range(5,15)],'title':'In the background'})
+        self.assertNotEqual(first['id'],second['id'])
+        self.assertEqual(self.app.jobs.list(self.doc.id)[1]['pending_keys'],[f'1:abcd{i}' for i in (12,13,14)])
+        self.assertEqual(self.app.jobs.create(self.doc.id,{'blocks':[block(3)]})['id'],first['id'])  # nothing new
+        forced=self.app.jobs.create(self.doc.id,{'blocks':[block(3)],'force':True})  # "translate again" still works
+        self.assertEqual(self.app.jobs.list(self.doc.id)[-1]['pending_keys'],['1:abcd3'])
+        self.assertNotIn(forced['id'],(first['id'],second['id']))
+
     def test_incomplete_batch_reports_missing_keys_and_explicit_resume_uses_single_blocks(self):
         calls=[]
         def translate(doc_id,payload,blocks):

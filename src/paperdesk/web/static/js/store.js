@@ -107,12 +107,13 @@ export class LibraryStore extends EventTarget {
   }
 
   async upload(files, folderId) {
-    var added = 0, existing = 0, failed = [];
+    var added = 0, existing = 0, failed = [], created = [];
     for (var i = 0; i < files.length; i++) {
       try {
         var result = await this.api.upload(files[i], folderId);
         if (result.created) {
           added++;
+          created.push(result.document.id);
           try {
             var title = await titleFromFile(files[i]);
             if (title) await this.api.patch("/api/documents/" + result.document.id, { title: title });
@@ -123,7 +124,7 @@ export class LibraryStore extends EventTarget {
       }
     }
     await this.load();
-    return { added: added, existing: existing, failed: failed };
+    return { added: added, existing: existing, failed: failed, created: created };
   }
 }
 

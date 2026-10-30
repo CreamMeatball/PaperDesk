@@ -88,14 +88,24 @@ class TranslationJobs:
         options = dict(current.options_for(provider.id))
         if model:
             options['model'] = model
-        payload = {'provider_id': provider.id, 'model': model,
-                   'options': options, 'language': current.target_language,
-                   'title': str(data.get('title', ''))[:300], 'section': str(data.get('section', ''))[:200],
-                   'terms': str(data.get('terms', ''))[:600], 'force': data.get('force') is True,
-                   'blocks': [{'key': b.key, 'sentences': list(b.sentences)} for b in blocks]}
-        fingerprint = hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        force = data.get('force') is True
         self.start()
         with self._lock:
+            # The reader and the background translation after an import may ask for the same paper: a paragraph
+            # already waiting in a queued or running job (same language) is not queued again.
+            active = [job for job in self.repository.list(doc_id) if job['state'] in ('queued', 'running')
+                      and job['payload']['language'] == current.target_language]
+            waiting = {b['key'] for job in active for b in job['payload']['blocks'][job['completed']:]}
+            if not force:
+                blocks = [b for b in blocks if b.key not in waiting]
+                if not blocks:
+                    return self.view(active[0])
+            payload = {'provider_id': provider.id, 'model': model,
+                       'options': options, 'language': current.target_language,
+                       'title': str(data.get('title', ''))[:300], 'section': str(data.get('section', ''))[:200],
+                       'terms': str(data.get('terms', ''))[:600], 'force': force,
+                       'blocks': [{'key': b.key, 'sentences': list(b.sentences)} for b in blocks]}
+            fingerprint = hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
             stamp = utcnow()
             job = self.repository.add({'id': uuid.uuid4().hex, 'doc_id': doc_id, 'fingerprint': fingerprint,
                                        'payload': payload, 'state': 'queued', 'total': len(blocks),

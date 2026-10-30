@@ -5,6 +5,7 @@ import { Sidebar } from "./js/sidebar.js";
 import { LibraryView } from "./js/library.js";
 import { ReaderView } from "./js/reader.js";
 import { AssistantPanel } from "./js/assistant.js";
+import { BackgroundTranslation } from "./js/background.js";
 import { SettingsView } from "./js/settings.js";
 import { ReadingListView } from "./js/reading.js";
 import { askText, confirmDialog, h, icon, modKey, toast } from "./js/ui.js";
@@ -27,6 +28,7 @@ class App {
     this.api = new ApiClient();
     this.store = new LibraryStore(this.api);
     this.settings = new SettingsModel(this.api);
+    this.background = new BackgroundTranslation(this);
     this.router = new Router();
     this.shell = document.getElementById("app");
     this.mainEl = document.getElementById("main");
@@ -200,6 +202,7 @@ class App {
     if (result.existing) parts.push(t("{n}편은 이미 있음", { n: result.existing }));
     if (parts.length) toast(parts.join(", "));
     result.failed.forEach(function (message) { toast(message, true); });
+    this.background.add(result.created);  // with automatic translation on, translating starts without opening the paper
   }
 
   // ---- folders ----

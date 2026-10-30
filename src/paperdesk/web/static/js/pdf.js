@@ -40,3 +40,18 @@ export async function titleFromFile(file) {
     return await extractPdfTitle(pdf, file.name);
   } finally { if (pdf) await pdf.destroy(); }
 }
+
+// Text and text positions of every page: the text for search, summaries and MCP, the positions for the layout
+// analysis. alive() lets a closed reader stop early (then null).
+export async function readPages(pdf, alive) {
+  var texts = [], layout = [];
+  for (var n = 1; n <= pdf.numPages; n++) {
+    var page = await pdf.getPage(n);
+    var content = await page.getTextContent();
+    layout.push({ width: page.view[2] - page.view[0], height: page.view[3] - page.view[1], view: page.view, items: content.items, styles: content.styles });
+    texts.push(content.items.map(function (item) { return (item.str || "") + (item.hasEOL ? "\n" : " "); }).join("")
+      .replace(/[ \t]+\n/g, "\n").replace(/ {2,}/g, " ").trim());
+    if (alive && !alive()) return null;
+  }
+  return { texts: texts, layout: layout };
+}
