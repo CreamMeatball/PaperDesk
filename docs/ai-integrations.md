@@ -1,10 +1,10 @@
 # AI 연동 방식과 근거 (2026-10-28 확인)
 
-Paperdesk는 사용자가 이미 가진 AI 접근 수단을 연결한다. 원칙: 다른 회사의 로그인 정보를 읽거나 보관하거나 대신 처리하지 않는다.
+PaperDesk는 사용자가 이미 가진 AI 접근 수단을 연결한다. 원칙: 다른 회사의 로그인 정보를 읽거나 보관하거나 대신 처리하지 않는다.
 
 ## OpenAI / Codex
 
-- **Codex CLI (`codex exec`)**: OpenAI가 비대화형 작업용으로 안내하는 연동 방식. Paperdesk는 사용자가 설치·로그인한 CLI를
+- **Codex CLI (`codex exec`)**: OpenAI가 비대화형 작업용으로 안내하는 연동 방식. PaperDesk는 사용자가 설치·로그인한 CLI를
   `codex exec --ephemeral --sandbox read-only --skip-git-repo-check --output-last-message <file> -`로 실행하고, 로그인 확인에는 `codex login status`를 쓴다(토큰 소모 없음).
   다음 단계: 스트리밍·여러 턴 대화가 필요하면 `codex app-server`(JSON-RPC)로 바꾼다.
   - https://developers.openai.com/blog/codex-as-a-platform
@@ -23,12 +23,12 @@ Paperdesk는 사용자가 이미 가진 AI 접근 수단을 연결한다. 원칙
 - **Claude API 키**: 외부 앱·오픈소스에 권장되는 방식.
   - https://platform.claude.com/docs/en/get-api-key
 - **Claude Code (`claude -p`)**: Anthropic은 외부 개발자가 Claude.ai 로그인을 자기 앱에 넣거나 요금제 인증 정보를 대신 처리하는 것을 금지하지만,
-  사용자가 수정하지 않은 Claude Code에 자기 구독으로 직접 로그인하는 것은 막지 않는다고 명시한다. Paperdesk는 사용자가 설치·로그인한 `claude`를
+  사용자가 수정하지 않은 Claude Code에 자기 구독으로 직접 로그인하는 것은 막지 않는다고 명시한다. PaperDesk는 사용자가 설치·로그인한 `claude`를
   도구 없이(`--tools ""`) 실행만 하고 자격 증명에는 접근하지 않는다. 로그인 확인은 `claude auth status`. 사용량은 사용자의 Claude 요금제 한도에 집계된다.
   Claude Code 이름·로고는 제품명이나 로고에 쓰지 않는다(“Claude Code로 실행” 같은 사실 설명만 허용).
   - https://code.claude.com/docs/en/legal-and-compliance
   - https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan
-- **Claude 데스크톱**: 앱이 Claude 데스크톱에 질문을 보내는 공식 경로는 없다. 대신 Paperdesk가 MCP 서버(`paperdesk mcp`)를 제공해
+- **Claude 데스크톱**: 앱이 Claude 데스크톱에 질문을 보내는 공식 경로는 없다. 대신 PaperDesk가 MCP 서버(`paperdesk mcp`)를 제공해
   Claude 데스크톱이 논문 목록·본문·검색을 도구로 호출한다. 추후 `.mcpb` 데스크톱 확장으로 묶어 한 번에 설치할 수 있다.
   - https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop
   - https://github.com/modelcontextprotocol/mcpb

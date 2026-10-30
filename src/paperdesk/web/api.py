@@ -386,7 +386,7 @@ class ApiController:
         path = self.app.paths.root/'backups/exports'/(token+'.paperdesk')
         if not path.is_file():
             raise NotFound(_("없는 파일이에요."))
-        return Response.send_file(path, 'application/zip', {'Content-Disposition': 'attachment; filename="Paperdesk-backup.paperdesk"'})
+        return Response.send_file(path, 'application/zip', {'Content-Disposition': 'attachment; filename="PaperDesk-backup.paperdesk"'})
 
     def inspect_backup(self, request: Request) -> Response:
         with tempfile.TemporaryDirectory(prefix='paperdesk-inspect-') as folder:
@@ -402,6 +402,6 @@ class ApiController:
     def diagnostics(self, request: Request) -> Response:
         from ..services.diagnostics import diagnostic_report
         response = Response.json(diagnostic_report(self.app.paths))
-        response.headers['Content-Disposition'] = 'attachment; filename="Paperdesk-diagnostics.json"'
+        response.headers['Content-Disposition'] = 'attachment; filename="PaperDesk-diagnostics.json"'
         response.headers['Cache-Control'] = 'no-store'
         return response

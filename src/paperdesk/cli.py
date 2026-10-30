@@ -210,11 +210,11 @@ def command_backup(args: argparse.Namespace) -> int:
             from .domain.errors import InvalidInput
             root = paths.root.resolve()
             if root.with_name('.'+root.name+'-restore.json').exists():
-                raise InvalidInput('The restore did not finish: the library folder could not be moved. Close Paperdesk and any '
+                raise InvalidInput('The restore did not finish: the library folder could not be moved. Close PaperDesk and any '
                                    'program that may be using files in it, then run the same command again.') from error
             (root/'pending-restore.json').unlink(missing_ok=True)  # nothing changed, so the next launch must not restore either
             raise InvalidInput(f'Restore failed and your current library was not changed: the library folder could not be moved '
-                               f'({root}). Close Paperdesk and any program that may be using files in that folder (File Explorer, '
+                               f'({root}). Close PaperDesk and any program that may be using files in that folder (File Explorer, '
                                'an editor, sync or antivirus software), then run the restore again.') from error
         print('Restored. Previous library retained in the adjacent .before-restore directory. Recheck AI connections.')
     return 0

@@ -50,12 +50,17 @@ class SourceInstallTests(unittest.TestCase):
             system, personal = Path(folder)/'Applications', Path(folder)/'home-Applications'
             system.mkdir()
             with mock.patch.object(self.installer, 'applications_folders', return_value=[system, personal]):
+                # 0.2.0 and earlier named it "Paperdesk (beta)"; a reinstall replaces that copy with the new name.
+                earlier = system/'Paperdesk (beta).app'
+                (earlier/'Contents').mkdir(parents=True)
+                (earlier/'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier': 'org.paperdesk.Paperdesk.source'}))
                 app = self.installer.create_app_bundle(Path('/opt/Paper desk/venv'))
-                self.assertEqual(app, system/'Paperdesk (beta).app')
+                self.assertEqual(app, system/'PaperDesk.app')
+                self.assertFalse(earlier.exists())
                 info = plistlib.loads((app/'Contents/Info.plist').read_bytes())
-                self.assertEqual((info['CFBundleExecutable'], info['CFBundleIdentifier']), ('Paperdesk', 'org.paperdesk.Paperdesk.source'))
+                self.assertEqual((info['CFBundleExecutable'], info['CFBundleIdentifier']), ('PaperDesk', 'org.paperdesk.Paperdesk.source'))
                 self.assertTrue((app/'Contents/Resources'/info['CFBundleIconFile']).is_file())
-                launcher = app/'Contents/MacOS/Paperdesk'
+                launcher = app/'Contents/MacOS/PaperDesk'
                 self.assertEqual(launcher.read_text(encoding='utf-8'), "#!/bin/sh\nexec '/opt/Paper desk/venv/bin/python' -m paperdesk\n")
                 self.assertTrue(os.access(launcher, os.X_OK))
                 self.assertEqual(self.installer.create_app_bundle(Path('/opt/Paper desk/venv')), app)  # reinstalling replaces it

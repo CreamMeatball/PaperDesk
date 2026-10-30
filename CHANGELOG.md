@@ -4,6 +4,14 @@ Versions follow [Semantic Versioning](https://semver.org/): new features raise t
 third. Before 1.0.0, the first official release, the first number stays 0. The rule and the release steps are in
 [docs/development.md](docs/development.md) (in Korean).
 
+## Unreleased
+
+### Changed
+
+- The app is now called **PaperDesk**: in the window, the Dock and the sidebar, and as the app in Applications (macOS)
+  and the Start menu shortcut (Windows), which were "Paperdesk (beta)". Running the install script again renames
+  the app and the shortcut and removes the old ones. The library, settings and install folders stay where they are.
+
 ## 0.2.0 — 2026-10-30
 
 This is the first tagged release. From now on, installs and automatic updates follow release tags instead of every

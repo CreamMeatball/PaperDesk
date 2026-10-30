@@ -13,7 +13,7 @@ The application shell otherwise uses the Python standard library; document analy
 
 ## Local Docling document analysis
 
-Source installs install Docling into the app's Python environment from `requirements/docling-macos.lock` or `requirements/docling-windows.lock`. The pinned Heron model is downloaded on first analysis. The following notices apply to these components. Each component retains its upstream license; Paperdesk's own license remains Apache-2.0.
+Source installs install Docling into the app's Python environment from `requirements/docling-macos.lock` or `requirements/docling-windows.lock`. The pinned Heron model is downloaded on first analysis. The following notices apply to these components. Each component retains its upstream license; PaperDesk's own license remains Apache-2.0.
 
 | Component | License | Upstream |
 | --- | --- | --- |

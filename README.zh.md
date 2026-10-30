@@ -1,6 +1,6 @@
 <div align="center">
 
-# Paperdesk
+# PaperDesk
 
 **在原文旁边，用你的语言读论文**
 
@@ -8,9 +8,9 @@
 
 </div>
 
-![Paperdesk：PDF 与译文并排显示，AI 助手正在解释选中的句子](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/zh/reader.png)
+![PaperDesk：PDF 与译文并排显示，AI 助手正在解释选中的句子](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/zh/reader.png)
 
-Paperdesk 是一款在 macOS 和 Windows 上阅读论文的桌面应用。它按主题文件夹整理论文 PDF，把整篇论文翻译在原文旁边，选中任何内容都能直接问你已经在用的 AI。论文和记录都只保存在你自己的电脑上。
+PaperDesk 是一款在 macOS 和 Windows 上阅读论文的桌面应用。它按主题文件夹整理论文 PDF，把整篇论文翻译在原文旁边，选中任何内容都能直接问你已经在用的 AI。论文和记录都只保存在你自己的电脑上。
 
 > **测试版**：目前从源码安装，交给 Claude Code 或 Codex 最省事。
 
@@ -19,14 +19,14 @@ Paperdesk 是一款在 macOS 和 Windows 上阅读论文的桌面应用。它按
 如果你在用 [Claude Code](https://claude.com/claude-code) 或 [Codex](https://github.com/openai/codex)，在终端运行下面任意一条：
 
 ```sh
-claude "按照 https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md 在这台电脑上安装 Paperdesk"
+claude "按照 https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md 在这台电脑上安装 PaperDesk"
 ```
 
 ```sh
-codex "按照 https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md 在这台电脑上安装 Paperdesk"
+codex "按照 https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md 在这台电脑上安装 PaperDesk"
 ```
 
-代理会按照 [INSTALL.md](INSTALL.md) 检查你的电脑。在系统范围安装任何东西（例如 Python 3.12 或 git）之前，它会先征求你的同意；最后告诉你怎么打开 Paperdesk、还需要设置什么。它不会经手你的登录信息或 API 密钥。
+代理会按照 [INSTALL.md](INSTALL.md) 检查你的电脑。在系统范围安装任何东西（例如 Python 3.12 或 git）之前，它会先征求你的同意；最后告诉你怎么打开 PaperDesk、还需要设置什么。它不会经手你的登录信息或 API 密钥。
 
 使用其他编程代理时，粘贴引号里的文字即可。想手动安装，请看[安装](#安装)。
 
@@ -34,7 +34,7 @@ codex "按照 https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTAL
 
 ### 随原文一起滚动的译文
 
-打开论文后，Paperdesk 先在本机分析版面（分栏、标题、图、公式），再用你连接的 AI 按段落翻译正文，译好的段落会立即显示。每一页的译文都排在该页旁边，随滚动一起移动。把鼠标移到原文段落上会高亮对应译文，移到译文上则高亮原文。
+打开论文后，PaperDesk 先在本机分析版面（分栏、标题、图、公式），再用你连接的 AI 按段落翻译正文，译好的段落会立即显示。每一页的译文都排在该页旁边，随滚动一起移动。把鼠标移到原文段落上会高亮对应译文，移到译文上则高亮原文。
 
 ![滚动：PDF 页面与译文一起移动](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/zh/scroll.gif)
 
@@ -86,13 +86,13 @@ cd PaperDesk
 py -3.12 scripts\install_source.py --auto-update
 ```
 
-安装完成后，在 macOS 上从“应用程序”（Applications）、在 Windows 上从开始菜单打开 **Paperdesk (beta)**。Windows 上请使用 [python.org](https://www.python.org/downloads/windows/) 的 Python：Windows 11 的智能应用控制可能会拦截 uv 或 conda 安装的 Python。
+安装完成后，在 macOS 上从“应用程序”（Applications）、在 Windows 上从开始菜单打开 **PaperDesk**。Windows 上请使用 [python.org](https://www.python.org/downloads/windows/) 的 Python：Windows 11 的智能应用控制可能会拦截 uv 或 conda 安装的 Python。
 
-加上 `--auto-update` 后，Paperdesk 会在后台从 GitHub 下载新版本，并在下次打开时应用；也可以在设置中点 **立即重新启动** 马上应用。论文库与应用分开保存，更新或卸载都不会删除。安装检查、卸载和问题排查见 [INSTALL.md](INSTALL.md)。
+加上 `--auto-update` 后，PaperDesk 会在后台从 GitHub 下载新版本，并在下次打开时应用；也可以在设置中点 **立即重新启动** 马上应用。论文库与应用分开保存，更新或卸载都不会删除。安装检查、卸载和问题排查见 [INSTALL.md](INSTALL.md)。
 
 ## 连接 AI
 
-Paperdesk 使用你已经在用的 AI。首次启动时会自动找到并选择已登录的 Codex CLI 或 Claude Code。
+PaperDesk 使用你已经在用的 AI。首次启动时会自动找到并选择已登录的 Codex CLI 或 Claude Code。
 
 | 连接 | 需要 |
 | --- | --- |
@@ -101,7 +101,7 @@ Paperdesk 使用你已经在用的 AI。首次启动时会自动找到并选择�
 | OpenAI API / Claude API | API 密钥（保存在 macOS 钥匙串或 Windows 凭据管理器中） |
 | Ollama / vLLM / OpenAI 兼容服务器 | 服务器地址（需要时提供服务器密钥） |
 
-Paperdesk 不会读取或保存 Codex、Claude 的登录信息。详见 [docs/ai-integrations.md](docs/ai-integrations.md)。
+PaperDesk 不会读取或保存 Codex、Claude 的登录信息。详见 [docs/ai-integrations.md](docs/ai-integrations.md)。
 
 ## 数据只在你的电脑上
 

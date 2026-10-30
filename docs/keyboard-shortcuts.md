@@ -21,4 +21,4 @@ Run `node tests/browser/reader_shortcuts.cjs` with Playwright installed to test 
 
 API references: [KeyboardEvent.code](https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/code), [KeyboardEvent.isComposing](https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/isComposing).
 
-메모는 원문 옆에 떠 있는 창에서 편집합니다. 메모 핀을 다시 누르면 초안을 유지한 채 숨기거나 다시 표시하며, 제목 표시줄을 잡아 옮길 수 있습니다. PDF 하이라이트를 클릭하거나 우클릭하면 삭제 메뉴가 열립니다. macOS Paperdesk 메뉴의 Settings… 또는 ⌘,로 설정을 엽니다.
+메모는 원문 옆에 떠 있는 창에서 편집합니다. 메모 핀을 다시 누르면 초안을 유지한 채 숨기거나 다시 표시하며, 제목 표시줄을 잡아 옮길 수 있습니다. PDF 하이라이트를 클릭하거나 우클릭하면 삭제 메뉴가 열립니다. macOS PaperDesk 메뉴의 Settings… 또는 ⌘,로 설정을 엽니다.

@@ -42,7 +42,7 @@ export class Sidebar {
     var themeChoice = window.paperdeskTheme.get();
     this.root.replaceChildren(
       h("div", { class: "sb-head" },
-        h("div", { class: "brand" }, h("img", { class: "brand-mark", src: "/brand-mark.png", alt: "", draggable: "false" }), "Paperdesk"),
+        h("div", { class: "brand" }, h("img", { class: "brand-mark", src: "/brand-mark.png", alt: "", draggable: "false" }), "PaperDesk"),
         iconButton("upload", t("PDF 가져오기 ({key})", { key: MOD + "O" }), function () { app.pickFiles(app.currentFolder()); }),
         iconButton("sidebar", t("사이드바 숨기기 ({key})", { key: MOD + "\\" }), function () { app.toggleSidebar(); })),
       h("label", { class: "search" }, icon("search", 14), input, h("kbd", null, MOD + "K")),

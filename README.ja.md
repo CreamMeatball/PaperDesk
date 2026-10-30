@@ -1,6 +1,6 @@
 <div align="center">
 
-# Paperdesk
+# PaperDesk
 
 **原文のすぐ隣で、自分の言語で論文を読む**
 
@@ -8,9 +8,9 @@
 
 </div>
 
-![Paperdesk：PDF と翻訳を並べて表示し、選んだ文を AI アシスタントが説明している画面](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/ja/reader.png)
+![PaperDesk：PDF と翻訳を並べて表示し、選んだ文を AI アシスタントが説明している画面](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/ja/reader.png)
 
-Paperdesk は macOS と Windows で論文を読むためのデスクトップアプリです。論文 PDF をテーマ別のフォルダで整理し、論文全体を原文の隣に翻訳し、選んだ部分をいつも使っている AI にその場で質問できます。論文と記録はすべて自分のコンピュータにだけ保存されます。
+PaperDesk は macOS と Windows で論文を読むためのデスクトップアプリです。論文 PDF をテーマ別のフォルダで整理し、論文全体を原文の隣に翻訳し、選んだ部分をいつも使っている AI にその場で質問できます。論文と記録はすべて自分のコンピュータにだけ保存されます。
 
 > **ベータ版**：現在はソースからインストールします。Claude Code や Codex に任せるのがいちばん簡単です。
 
@@ -19,11 +19,11 @@ Paperdesk は macOS と Windows で論文を読むためのデスクトップア
 [Claude Code](https://claude.com/claude-code) または [Codex](https://github.com/openai/codex) を使っているなら、ターミナルで次のどちらかを実行してください。
 
 ```sh
-claude "https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md に従って、このコンピュータに Paperdesk をインストールして"
+claude "https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md に従って、このコンピュータに PaperDesk をインストールして"
 ```
 
 ```sh
-codex "https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md に従って、このコンピュータに Paperdesk をインストールして"
+codex "https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md に従って、このコンピュータに PaperDesk をインストールして"
 ```
 
 エージェントは [INSTALL.md](INSTALL.md) に従ってコンピュータの環境を確認します。Python 3.12 や git のようにシステム全体にインストールするものがあれば先に確認し、最後に開き方と残りの設定を教えてくれます。ログイン情報や API キーは扱いません。
@@ -34,7 +34,7 @@ codex "https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md �
 
 ### 原文と一緒に動く翻訳
 
-論文を開くと、Paperdesk はまず手元のコンピュータで段組み・見出し・図・数式などのレイアウトを解析し、接続した AI で本文を段落ごとに翻訳します。訳し終えた段落からすぐに表示されます。各ページの翻訳はそのページの隣に並び、スクロールと一緒に動きます。原文の段落にマウスを重ねると対応する訳文が、訳文に重ねると原文が強調されます。
+論文を開くと、PaperDesk はまず手元のコンピュータで段組み・見出し・図・数式などのレイアウトを解析し、接続した AI で本文を段落ごとに翻訳します。訳し終えた段落からすぐに表示されます。各ページの翻訳はそのページの隣に並び、スクロールと一緒に動きます。原文の段落にマウスを重ねると対応する訳文が、訳文に重ねると原文が強調されます。
 
 ![スクロール：PDF のページと翻訳が一緒に動く様子](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/ja/scroll.gif)
 
@@ -86,7 +86,7 @@ cd PaperDesk
 py -3.12 scripts\install_source.py --auto-update
 ```
 
-インストール後、macOS では「アプリケーション」（Applications）から、Windows ではスタートメニューから **Paperdesk (beta)** を開きます。Windows では Python は [python.org](https://www.python.org/downloads/windows/) のものを使ってください。Windows 11 のスマート アプリ コントロールが uv や conda でインストールした Python をブロックすることがあります。
+インストール後、macOS では「アプリケーション」（Applications）から、Windows ではスタートメニューから **PaperDesk** を開きます。Windows では Python は [python.org](https://www.python.org/downloads/windows/) のものを使ってください。Windows 11 のスマート アプリ コントロールが uv や conda でインストールした Python をブロックすることがあります。
 
 `--auto-update` を付けると、新しいバージョンを GitHub からバックグラウンドで受け取り、次にアプリを開いたときに適用します。設定の **今すぐ再起動** を押すとすぐに適用されます。ライブラリはアプリとは別に保存されるので、更新やアンインストールをしても残ります。インストールの確認・アンインストール・トラブルシューティングは [INSTALL.md](INSTALL.md) を参照してください。
 
@@ -101,7 +101,7 @@ py -3.12 scripts\install_source.py --auto-update
 | OpenAI API / Claude API | API キー（macOS のキーチェーン・Windows の資格情報マネージャーに保存） |
 | Ollama / vLLM・OpenAI 互換サーバー | サーバーのアドレス（必要ならサーバーのキー） |
 
-Paperdesk は Codex や Claude のログイン情報を読み取ったり保存したりしません。詳しくは [docs/ai-integrations.md](docs/ai-integrations.md) を参照してください。
+PaperDesk は Codex や Claude のログイン情報を読み取ったり保存したりしません。詳しくは [docs/ai-integrations.md](docs/ai-integrations.md) を参照してください。
 
 ## データは自分のコンピュータだけに
 

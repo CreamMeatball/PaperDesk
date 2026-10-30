@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Install Paperdesk from this source folder (beta; there is no signed installer yet).
+"""Install PaperDesk from this source folder (beta; there is no signed installer yet).
 
     Windows:  py -3.12 scripts/install_source.py
     macOS:    python3.12 scripts/install_source.py
 
 Creates a separate Python environment with the same pinned packages as the release builds
 (native window and Docling analysis, about 1.3 GB), clones this repository's origin into the install
-folder and installs Paperdesk from that clone (editable), and adds "Paperdesk (beta)" to Applications
+folder and installs PaperDesk from that clone (editable), and adds "PaperDesk" to Applications
 (macOS) or the Start menu (Windows). With automatic updates on (asked once, or --auto-update), the app
 fetches new releases from GitHub in the background and applies them the next time it opens; running this
 script again also updates. --uninstall removes the environment, the clone and the app or shortcut. Your
@@ -33,8 +33,9 @@ WINDOWS = sys.platform == "win32"
 MACOS = sys.platform == "darwin"
 PYTHON = (3, 12)  # the pinned window and Docling locks are resolved for Python 3.12
 MARKER = "paperdesk-source-install.txt"
-SHORTCUT = "Paperdesk (beta).lnk"
-APP_BUNDLE = "Paperdesk (beta).app"
+SHORTCUT = "PaperDesk.lnk"
+APP_BUNDLE = "PaperDesk.app"
+EARLIER_NAME = "Paperdesk (beta)"  # the app and shortcut up to 0.2.0; replaced on reinstall, removed on uninstall
 
 
 def default_prefix() -> Path:
@@ -77,13 +78,14 @@ def signature_status(path: Path) -> str:
         return ""
 
 
-def shortcut_path() -> Path:
-    return Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / SHORTCUT
+def shortcut_path(name: str = SHORTCUT) -> Path:
+    return Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / name
 
 
 def create_shortcut(prefix: Path, environment: Path) -> Path:
     link = shortcut_path()
     link.parent.mkdir(parents=True, exist_ok=True)
+    shortcut_path(EARLIER_NAME + ".lnk").unlink(missing_ok=True)
     icon = prefix / "Paperdesk.ico"
     shutil.copy2(ROOT / "packaging" / "windows" / "Paperdesk.ico", icon)
     powershell("; ".join([
@@ -92,7 +94,7 @@ def create_shortcut(prefix: Path, environment: Path) -> Path:
         "$s.Arguments = '-m paperdesk'",
         f"$s.WorkingDirectory = {quote(prefix)}",
         f"$s.IconLocation = {quote(icon)}",
-        "$s.Description = 'Paperdesk (beta, installed from source)'",
+        "$s.Description = 'PaperDesk (installed from source)'",
         "$s.Save()"]))
     return link
 
@@ -112,17 +114,18 @@ def app_bundle_id() -> str:
 
 def remove_app_bundles() -> None:
     for folder in applications_folders():
-        app = folder / APP_BUNDLE
-        try:
-            ours = plistlib.loads((app / "Contents" / "Info.plist").read_bytes()).get("CFBundleIdentifier") == app_bundle_id()
-        except (OSError, ValueError):
-            continue
-        if ours:
-            shutil.rmtree(app)
+        for name in (APP_BUNDLE, EARLIER_NAME + ".app"):
+            app = folder / name
+            try:
+                ours = plistlib.loads((app / "Contents" / "Info.plist").read_bytes()).get("CFBundleIdentifier") == app_bundle_id()
+            except (OSError, ValueError):
+                continue
+            if ours:
+                shutil.rmtree(app)
 
 
 def create_app_bundle(environment: Path) -> Path | None:
-    """A small macOS app that starts Paperdesk from this environment, so it opens like any other app."""
+    """A small macOS app that starts PaperDesk from this environment, so it opens like any other app."""
     sys.path.insert(0, str(ROOT / "src"))
     from paperdesk import APP_NAME, MAC_MINIMUM_VERSION
 
@@ -211,7 +214,7 @@ def ask_auto_update(previous: bool | None) -> bool:
         return previous
     if not sys.stdin.isatty():
         return False
-    answer = input("Check GitHub for new versions when Paperdesk opens and update automatically? [Y/n] ").strip().lower()
+    answer = input("Check GitHub for new versions when PaperDesk opens and update automatically? [Y/n] ").strip().lower()
     return answer in ("", "y", "yes")
 
 
@@ -253,7 +256,7 @@ def install(prefix: Path, *, url: str | None = None, branch: str = "main", auto_
     if sys.version_info[:2] != PYTHON:
         hint = ("winget install Python.Python.3.12, then: py -3.12 scripts/install_source.py" if WINDOWS else
                 "brew install python@3.12, then: python3.12 scripts/install_source.py")
-        raise SystemExit(f"Paperdesk needs Python 3.12 (this is {sys.version.split()[0]}). {hint}")
+        raise SystemExit(f"PaperDesk needs Python 3.12 (this is {sys.version.split()[0]}). {hint}")
     requirements = locks()
     if WINDOWS and signature_status(Path(getattr(sys, "_base_executable", sys.executable))) not in ("Valid", ""):
         print("Warning: this Python is not signed (for example one installed by uv or conda). Windows Smart App Control "
@@ -263,7 +266,7 @@ def install(prefix: Path, *, url: str | None = None, branch: str = "main", auto_
     environment = prefix / "venv"
     fresh = not matching_environment(environment)
     prefix.mkdir(parents=True, exist_ok=True)
-    (prefix / MARKER).write_text(f"Paperdesk source install from {ROOT}\n", encoding="utf-8")
+    (prefix / MARKER).write_text(f"PaperDesk source install from {ROOT}\n", encoding="utf-8")
     if fresh:
         print(f"Creating {environment}", flush=True)
         venv.EnvBuilder(with_pip=True, clear=True).create(environment)
@@ -272,7 +275,7 @@ def install(prefix: Path, *, url: str | None = None, branch: str = "main", auto_
     tree = source or ROOT
     pip = (python, "-m", "pip", "install", "--disable-pip-version-check", "--require-virtualenv")
     run(*pip, *[arg for lock in requirements for arg in ("-r", tree / "requirements" / lock.name)])
-    # Paperdesk itself: dependencies come only from the pinned locks above (they include setuptools, so no
+    # PaperDesk itself: dependencies come only from the pinned locks above (they include setuptools, so no
     # build download). The clone is installed editable: an update is then just a checkout of new commits.
     if source:
         run(*pip, "--no-deps", "--no-build-isolation", "-e", source)
@@ -281,7 +284,7 @@ def install(prefix: Path, *, url: str | None = None, branch: str = "main", auto_
     run(python, "-m", "paperdesk", "--version")
     automatic = record(prefix, source, branch, auto_update)
 
-    print("\nPaperdesk (beta) is installed.")
+    print("\nPaperDesk is installed.")
     if WINDOWS:
         print(f"  Start menu:  {create_shortcut(prefix, environment).stem}")
         print(f"  or run:      \"{environment_python(environment, window=True)}\" -m paperdesk")
@@ -292,7 +295,7 @@ def install(prefix: Path, *, url: str | None = None, branch: str = "main", auto_
         print(f"  or run:      {python} -m paperdesk")
     print(f"  MCP setup:   \"{python}\" -m paperdesk mcp-config claude   (or codex)")
     if automatic:
-        print(f"  Update:      automatic; new releases from GitHub apply the next time Paperdesk opens (Settings to turn off)")
+        print(f"  Update:      automatic; new releases from GitHub apply the next time PaperDesk opens (Settings to turn off)")
     elif source:
         print(f"  Update:      Settings → check for updates, or run this script again (automatic updates are off)")
     else:
@@ -313,6 +316,7 @@ def uninstall(prefix: Path) -> None:
     library = data_folder()
     if WINDOWS:
         shortcut_path().unlink(missing_ok=True)
+        shortcut_path(EARLIER_NAME + ".lnk").unlink(missing_ok=True)
     if MACOS:
         remove_app_bundles()
     if prefix.exists():

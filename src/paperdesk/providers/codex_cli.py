@@ -12,7 +12,7 @@ from ..i18n import _
 class CodexCliProvider(CliProvider):
     """Runs the user's own Codex CLI non-interactively (codex exec), an integration path OpenAI documents.
 
-    Uses whatever login the CLI already has (ChatGPT plan or API key). Paperdesk never sees the credentials.
+    Uses whatever login the CLI already has (ChatGPT plan or API key). PaperDesk never sees the credentials.
     Later upgrade path: drive 'codex app-server' over JSON-RPC for streaming and multi-turn threads.
     """
 

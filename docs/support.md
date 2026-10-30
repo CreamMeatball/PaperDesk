@@ -1,14 +1,14 @@
 # Supported beta scope
 
-Paperdesk is installed from source ([INSTALL.md](../INSTALL.md)) on Apple Silicon (arm64) with macOS 15 or later, and on Windows 10/11 x64 with Python 3.12 from python.org. Intel Macs are not supported by this beta. Packaged installers (a macOS DMG, a signed Windows installer) are not provided yet. Linux is a development shell.
+PaperDesk is installed from source ([INSTALL.md](../INSTALL.md)) on Apple Silicon (arm64) with macOS 15 or later, and on Windows 10/11 x64 with Python 3.12 from python.org. Intel Macs are not supported by this beta. Packaged installers (a macOS DMG, a signed Windows installer) are not provided yet. Linux is a development shell.
 
 PDF limits: 200 MB per file, 500 pages, page dimensions at most 14,400 PDF points, bounded rendering canvases and image decoding. Text PDFs, including multiple columns, are the supported reading/translation input. Scanned pages can be displayed but have no OCR or selectable text. Password-protected PDFs are not supported. Corrupt files display an error. Large, mixed-layout and multilingual PDFs still need hands-on checks.
 
 ## AI setup
 
-Install and sign in to the provider's official CLI yourself. In Paperdesk settings choose **Install and model check**, select and save a model, then **Test connection**. Login checks do not prove that a model is usable. The test sends a small actual request and counts toward provider usage. CLI discovery compares installed versions and uses the official Codex app-server `model/list` RPC; it never reads credential files. Custom executable paths are retained when explicitly configured. Models are never silently substituted and connections never switch to another billed provider automatically.
+Install and sign in to the provider's official CLI yourself. In PaperDesk settings choose **Install and model check**, select and save a model, then **Test connection**. Login checks do not prove that a model is usable. The test sends a small actual request and counts toward provider usage. CLI discovery compares installed versions and uses the official Codex app-server `model/list` RPC; it never reads credential files. Custom executable paths are retained when explicitly configured. Models are never silently substituted and connections never switch to another billed provider automatically.
 
-Codex's current desktop application has a newer CLI than some standalone installations. Its internal path can change during an app update; run discovery again if the saved path stops existing. Paperdesk does not redistribute Codex or Claude binaries. Use `codex login` or the official Claude Code `/login` flow when prompted. Claude's account limit and reset time come from the provider, not a limit imposed by Paperdesk.
+Codex's current desktop application has a newer CLI than some standalone installations. Its internal path can change during an app update; run discovery again if the saved path stops existing. PaperDesk does not redistribute Codex or Claude binaries. Use `codex login` or the official Claude Code `/login` flow when prompted. Claude's account limit and reset time come from the provider, not a limit imposed by PaperDesk.
 
 ## Translation recovery and quality
 

@@ -58,7 +58,7 @@ export class SettingsView {
       h("h3", null, t("백업·복원")), this.backupSection(),
       h("h3", null, t("지원 범위·개인정보")),
       h("p", { class: "lead" }, t("Mac 베타는 Apple Silicon을 대상으로 해요. 텍스트 PDF 읽기를 지원하며 스캔 문서 OCR과 암호화 PDF는 지원하지 않아요. AI 번역은 원문·수식·인용과 함께 확인해 주세요.")),
-      h("a", { class: "btn", href: "/api/diagnostics", download: "Paperdesk-diagnostics.json" }, t("내용 없는 진단 정보 저장"))
+      h("a", { class: "btn", href: "/api/diagnostics", download: "PaperDesk-diagnostics.json" }, t("내용 없는 진단 정보 저장"))
     ].filter(Boolean));  // the login-check box is absent once an AI connection works
   }
 
@@ -210,7 +210,7 @@ export class SettingsView {
         var button = event.currentTarget; button.disabled = true;
         try {
           var result = await self.app.api.post("/api/backups/export");
-          var link = h("a", { href: result.url, download: "Paperdesk-backup.paperdesk" });
+          var link = h("a", { href: result.url, download: "PaperDesk-backup.paperdesk" });
           document.body.append(link); link.click(); link.remove();
         } catch (error) { toast(error.message, true); }
         finally { button.disabled = false; }
@@ -270,7 +270,7 @@ export class SettingsView {
   mcpSection() {
     return h("div", { class: "group" }, h("div", { class: "field-row", style: "display:block" },
       h("p", { class: "desc", style: "margin:0 0 6px;color:var(--text-2)" },
-        t("Claude 데스크톱이나 Codex 앱이 Paperdesk에 저장된 논문 목록·본문·검색 결과를 읽을 수 있게 연결해요. "),
+        t("Claude 데스크톱이나 Codex 앱이 PaperDesk에 저장된 논문 목록·본문·검색 결과를 읽을 수 있게 연결해요. "),
         t("이 방식은 각 앱이 공식 지원하는 MCP를 쓰고, 그 앱의 로그인 정보에는 접근하지 않아요. 터미널에서 아래 명령을 실행해 나온 내용을 각 앱 설정에 붙여 넣으세요.")),
       h("pre", { class: "code" }, t("paperdesk mcp-config claude   # Claude 데스크톱\npaperdesk mcp-config codex    # Codex"))));
   }

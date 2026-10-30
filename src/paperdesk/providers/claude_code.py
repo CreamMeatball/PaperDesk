@@ -13,7 +13,7 @@ class ClaudeCodeProvider(CliProvider):
     """Runs the user's own, unmodified Claude Code binary in print mode (claude -p).
 
     Anthropic's terms: third-party apps must not offer Claude.ai login or handle plan credentials, but an end user
-    may sign in to the unmodified Claude Code binary with their own subscription. So Paperdesk only spawns the
+    may sign in to the unmodified Claude Code binary with their own subscription. So PaperDesk only spawns the
     binary the user installed and logged in to; it never reads or stores Claude credentials.
     """
 

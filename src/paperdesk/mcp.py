@@ -1,4 +1,4 @@
-"""MCP server over stdio so the user's Claude Desktop or Codex can read papers stored in Paperdesk.
+"""MCP server over stdio so the user's Claude Desktop or Codex can read papers stored in PaperDesk.
 
 This is the officially supported direction for desktop assistants: they call our tools; we never touch their logins.
 """
@@ -35,7 +35,7 @@ class McpTool(ABC):
 
 class ListPapersTool(McpTool):
     name = "list_papers"
-    description = "List papers in the user's Paperdesk library with their folder path and whether text is available."
+    description = "List papers in the user's PaperDesk library with their folder path and whether text is available."
     input_schema = {"type": "object", "properties": {"folder": {"type": "string", "description": "Optional folder name filter"}}}
 
     def call(self, arguments: dict) -> str:
@@ -72,7 +72,7 @@ class ReadPaperTool(McpTool):
     def call(self, arguments: dict) -> str:
         doc = self.app.library.get(str(arguments.get("id", "")))
         if doc.text_pages == 0:
-            return f"'{doc.title}' has no extracted text yet. Ask the user to open it once in Paperdesk."
+            return f"'{doc.title}' has no extracted text yet. Ask the user to open it once in PaperDesk."
         first = int(arguments.get("first_page") or 1)
         last = int(arguments.get("last_page") or doc.text_pages)
         parts, size = [f"# {doc.title}"], 0

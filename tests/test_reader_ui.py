@@ -60,7 +60,7 @@ class ReaderUIRegressionTests(unittest.TestCase):
             self.assertEqual(app.setAppearance_.call_count, calls)
         options = webview.start.call_args.kwargs
         # Started by python, the Dock and app menu would otherwise say "Python" with Python's icon.
-        self.assertEqual(info['CFBundleName'], 'Paperdesk')
+        self.assertEqual(info['CFBundleName'], 'PaperDesk')
         self.assertEqual(Path(options['icon']).name, 'Paperdesk.icns')
         self.assertEqual(options['menu'][0].title,'__app__')
         action = options['menu'][0].items[0]

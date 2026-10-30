@@ -1,6 +1,6 @@
 <div align="center">
 
-# Paperdesk
+# PaperDesk
 
 **Read research papers in your own language, right beside the original.**
 
@@ -8,9 +8,9 @@
 
 </div>
 
-![Paperdesk: a PDF with its translation side by side and the AI Assistant explaining a selected sentence](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/en/reader.png)
+![PaperDesk: a PDF with its translation side by side and the AI Assistant explaining a selected sentence](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/en/reader.png)
 
-Paperdesk is a desktop app for reading research papers on macOS and Windows.
+PaperDesk is a desktop app for reading research papers on macOS and Windows.
 
 - Keep your PDFs in folders by topic.
 - Translate a whole paper beside the original.
@@ -18,21 +18,21 @@ Paperdesk is a desktop app for reading research papers on macOS and Windows.
 
 Your papers and notes stay on your computer.
 
-> **Beta.** Paperdesk is installed from source for now. The quickest way is to let Claude Code or Codex do it.
+> **Beta.** PaperDesk is installed from source for now. The quickest way is to let Claude Code or Codex do it.
 
 ## Install in one command
 
 If you use [Claude Code](https://claude.com/claude-code) or [Codex](https://github.com/openai/codex), run one of these in a terminal:
 
 ```sh
-claude "Install Paperdesk on this computer by following https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md"
+claude "Install PaperDesk on this computer by following https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md"
 ```
 
 ```sh
-codex "Install Paperdesk on this computer by following https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md"
+codex "Install PaperDesk on this computer by following https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md"
 ```
 
-The agent follows [INSTALL.md](INSTALL.md). It checks your computer and asks before installing anything system-wide, such as Python 3.12 or git. At the end it tells you how to open Paperdesk and what is left to set up. It never handles your sign-ins or API keys.
+The agent follows [INSTALL.md](INSTALL.md). It checks your computer and asks before installing anything system-wide, such as Python 3.12 or git. At the end it tells you how to open PaperDesk and what is left to set up. It never handles your sign-ins or API keys.
 
 With another coding agent, paste the text in quotes. To install by hand, see [Install](#install).
 
@@ -40,7 +40,7 @@ With another coding agent, paste the text in quotes. To install by hand, see [In
 
 ### A translation that scrolls with the original
 
-When you open a paper, Paperdesk analyzes its layout on your computer (columns, headings, figures and equations), then your AI translates it paragraph by paragraph. Translated paragraphs appear as they finish.
+When you open a paper, PaperDesk analyzes its layout on your computer (columns, headings, figures and equations), then your AI translates it paragraph by paragraph. Translated paragraphs appear as they finish.
 
 Each page's translation sits beside that page and moves with it as you scroll. Point at a paragraph to highlight its translation, or point at the translation to highlight the original.
 
@@ -103,15 +103,15 @@ cd PaperDesk
 py -3.12 scripts\install_source.py --auto-update
 ```
 
-Then open **Paperdesk (beta)** from Applications on macOS or from the Start menu on Windows. On Windows, use Python from [python.org](https://www.python.org/downloads/windows/): Windows 11 Smart App Control can block Python from uv or conda.
+Then open **PaperDesk** from Applications on macOS or from the Start menu on Windows. On Windows, use Python from [python.org](https://www.python.org/downloads/windows/): Windows 11 Smart App Control can block Python from uv or conda.
 
-**Updates.** With `--auto-update`, Paperdesk downloads new versions from GitHub in the background and applies them the next time it opens, or right away with **Restart now** in Settings.
+**Updates.** With `--auto-update`, PaperDesk downloads new versions from GitHub in the background and applies them the next time it opens, or right away with **Restart now** in Settings.
 
 **Your library** is stored separately from the app, and is kept when you update or uninstall. For checks, uninstalling and troubleshooting, see [INSTALL.md](INSTALL.md).
 
 ## Connect an AI
 
-Paperdesk works with the AI you already have. On first launch it selects a signed-in Codex CLI or Claude Code automatically.
+PaperDesk works with the AI you already have. On first launch it selects a signed-in Codex CLI or Claude Code automatically.
 
 | Connection | What you need |
 | --- | --- |
@@ -120,7 +120,7 @@ Paperdesk works with the AI you already have. On first launch it selects a signe
 | OpenAI API / Claude API | Your API key, kept in the macOS Keychain or Windows Credential Manager |
 | Ollama / vLLM / OpenAI-compatible server | The server address, and a key if the server needs one |
 
-Paperdesk never reads or stores your Codex or Claude sign-ins. See [docs/ai-integrations.md](docs/ai-integrations.md) for details.
+PaperDesk never reads or stores your Codex or Claude sign-ins. See [docs/ai-integrations.md](docs/ai-integrations.md) for details.
 
 ## Your data stays on your computer
 
@@ -131,7 +131,7 @@ Paperdesk never reads or stores your Codex or Claude sign-ins. See [docs/ai-inte
 
 **Offline:** reading, previews, and saved translations, notes and conversations. Layout analysis also runs on your computer, using Docling. It downloads a layout model (about 170 MB) the first time.
 
-**Online:** Paperdesk connects only:
+**Online:** PaperDesk connects only:
 
 - to the AI you chose (no internet is needed for Ollama or vLLM on your own machine);
 - to arXiv and OpenAlex, when you search for or download a paper;
@@ -150,6 +150,6 @@ See [docs/privacy.md](docs/privacy.md).
 
 ## License
 
-Paperdesk is licensed under the [Apache License 2.0](LICENSE). Third-party software keeps its own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+PaperDesk is licensed under the [Apache License 2.0](LICENSE). Third-party software keeps its own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 The screenshots show "Attention Is All You Need" (Vaswani et al., 2017, [arXiv:1706.03762](https://arxiv.org/abs/1706.03762)) to demonstrate the app.

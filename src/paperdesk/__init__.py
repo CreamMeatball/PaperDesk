@@ -1,10 +1,10 @@
-"""Paperdesk: a local PDF paper reader with pluggable AI assistants.
+"""PaperDesk: a local PDF paper reader with pluggable AI assistants.
 
 APP_NAME is the display name. Persistent identifiers must never follow a branding change.
 """
 
 __version__ = "0.2.0"
-APP_NAME = "Paperdesk"
+APP_NAME = "PaperDesk"
 APP_ID = "paperdesk"
 MAC_BUNDLE_ID = "org.paperdesk.Paperdesk"
 MAC_MINIMUM_VERSION = "15.0"

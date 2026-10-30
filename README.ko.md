@@ -1,6 +1,6 @@
 <div align="center">
 
-# Paperdesk
+# PaperDesk
 
 **원문 바로 옆에서, 내 언어로 읽는 논문 리더**
 
@@ -8,9 +8,9 @@
 
 </div>
 
-![Paperdesk: PDF와 번역을 나란히 보고, 선택한 문장을 AI 도우미가 설명하는 화면](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/ko/reader.png)
+![PaperDesk: PDF와 번역을 나란히 보고, 선택한 문장을 AI 도우미가 설명하는 화면](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/ko/reader.png)
 
-Paperdesk는 macOS·Windows에서 논문을 읽는 데스크톱 앱입니다. 논문 PDF를 주제별 폴더로 정리하고, 논문 전체를 원문 옆에 번역하며, 고른 부분을 이미 쓰고 있는 AI에게 바로 물어볼 수 있습니다. 논문과 기록은 모두 내 컴퓨터에만 저장됩니다.
+PaperDesk는 macOS·Windows에서 논문을 읽는 데스크톱 앱입니다. 논문 PDF를 주제별 폴더로 정리하고, 논문 전체를 원문 옆에 번역하며, 고른 부분을 이미 쓰고 있는 AI에게 바로 물어볼 수 있습니다. 논문과 기록은 모두 내 컴퓨터에만 저장됩니다.
 
 > **베타**: 지금은 소스에서 설치합니다. Claude Code나 Codex에게 맡기면 가장 간단해요.
 
@@ -19,11 +19,11 @@ Paperdesk는 macOS·Windows에서 논문을 읽는 데스크톱 앱입니다. �
 [Claude Code](https://claude.com/claude-code)나 [Codex](https://github.com/openai/codex)를 쓰고 있다면 터미널에서 아래 중 하나를 실행하세요.
 
 ```sh
-claude "https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md 를 따라 이 컴퓨터에 Paperdesk를 설치해 줘"
+claude "https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md 를 따라 이 컴퓨터에 PaperDesk를 설치해 줘"
 ```
 
 ```sh
-codex "https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md 를 따라 이 컴퓨터에 Paperdesk를 설치해 줘"
+codex "https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md 를 따라 이 컴퓨터에 PaperDesk를 설치해 줘"
 ```
 
 에이전트는 [INSTALL.md](INSTALL.md)를 따라 컴퓨터 환경을 확인합니다. Python 3.12나 git처럼 시스템 전체에 설치할 것이 있으면 먼저 물어보고, 마지막에 여는 방법과 남은 설정을 알려 줘요. 로그인 정보와 API 키는 다루지 않습니다.
@@ -86,7 +86,7 @@ cd PaperDesk
 py -3.12 scripts\install_source.py --auto-update
 ```
 
-설치가 끝나면 macOS는 응용 프로그램(Applications)에서, Windows는 시작 메뉴에서 **Paperdesk (beta)**를 엽니다. Windows에서는 [python.org](https://www.python.org/downloads/windows/)의 Python을 쓰세요. Windows 11의 스마트 앱 컨트롤이 uv·conda로 설치한 Python을 막을 수 있습니다.
+설치가 끝나면 macOS는 응용 프로그램(Applications)에서, Windows는 시작 메뉴에서 **PaperDesk**를 엽니다. Windows에서는 [python.org](https://www.python.org/downloads/windows/)의 Python을 쓰세요. Windows 11의 스마트 앱 컨트롤이 uv·conda로 설치한 Python을 막을 수 있습니다.
 
 `--auto-update`를 붙이면 새 버전을 GitHub에서 백그라운드로 받아 두었다가 다음에 앱을 열 때 적용합니다. 설정에서 **지금 다시 시작**을 누르면 바로 적용돼요. 서재는 앱과 따로 저장되므로 업데이트하거나 제거해도 그대로 남습니다. 설치 확인·제거·문제 해결은 [INSTALL.md](INSTALL.md)를 참고하세요.
 
@@ -101,7 +101,7 @@ py -3.12 scripts\install_source.py --auto-update
 | OpenAI API / Claude API | API 키 (macOS 키체인·Windows 자격 증명 관리자에 보관) |
 | Ollama / vLLM·OpenAI 호환 서버 | 서버 주소 (필요하면 서버 키) |
 
-Paperdesk는 Codex·Claude 로그인 정보를 읽거나 저장하지 않습니다. 자세한 근거는 [docs/ai-integrations.md](docs/ai-integrations.md)에 있습니다.
+PaperDesk는 Codex·Claude 로그인 정보를 읽거나 저장하지 않습니다. 자세한 근거는 [docs/ai-integrations.md](docs/ai-integrations.md)에 있습니다.
 
 ## 데이터는 내 컴퓨터에만
 

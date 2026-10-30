@@ -146,7 +146,7 @@ class Database:
         with self.connect() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
             if version > len(MIGRATIONS):
-                raise InvalidInput(_("이 서재는 더 최신 앱에서 저장되었어요. Paperdesk를 업데이트한 뒤 다시 열어 주세요."))
+                raise InvalidInput(_("이 서재는 더 최신 앱에서 저장되었어요. PaperDesk를 업데이트한 뒤 다시 열어 주세요."))
             db.execute("PRAGMA journal_mode = WAL")
             if 0 < version < len(MIGRATIONS):
                 folder = self.path.parent / "backups" / "migrations"
