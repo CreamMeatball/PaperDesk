@@ -88,7 +88,7 @@ py -3.12 scripts\install_source.py --auto-update
 
 설치가 끝나면 macOS는 응용 프로그램(Applications)에서, Windows는 시작 메뉴에서 **Paperdesk (beta)**를 엽니다. Windows에서는 [python.org](https://www.python.org/downloads/windows/)의 Python을 쓰세요. Windows 11의 스마트 앱 컨트롤이 uv·conda로 설치한 Python을 막을 수 있습니다.
 
-`--auto-update`를 붙이면 새 버전을 GitHub에서 백그라운드로 받아 두었다가 다음에 앱을 열 때 적용합니다. 서재는 앱과 따로 저장되므로 업데이트하거나 제거해도 그대로 남습니다. 설치 확인·제거·문제 해결은 [INSTALL.md](INSTALL.md)를 참고하세요.
+`--auto-update`를 붙이면 새 버전을 GitHub에서 백그라운드로 받아 두었다가 다음에 앱을 열 때 적용합니다. 설정에서 **지금 다시 시작**을 누르면 바로 적용돼요. 서재는 앱과 따로 저장되므로 업데이트하거나 제거해도 그대로 남습니다. 설치 확인·제거·문제 해결은 [INSTALL.md](INSTALL.md)를 참고하세요.
 
 ## AI 연결
 

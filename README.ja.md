@@ -88,7 +88,7 @@ py -3.12 scripts\install_source.py --auto-update
 
 インストール後、macOS では「アプリケーション」（Applications）から、Windows ではスタートメニューから **Paperdesk (beta)** を開きます。Windows では Python は [python.org](https://www.python.org/downloads/windows/) のものを使ってください。Windows 11 のスマート アプリ コントロールが uv や conda でインストールした Python をブロックすることがあります。
 
-`--auto-update` を付けると、新しいバージョンを GitHub からバックグラウンドで受け取り、次にアプリを開いたときに適用します。ライブラリはアプリとは別に保存されるので、更新やアンインストールをしても残ります。インストールの確認・アンインストール・トラブルシューティングは [INSTALL.md](INSTALL.md) を参照してください。
+`--auto-update` を付けると、新しいバージョンを GitHub からバックグラウンドで受け取り、次にアプリを開いたときに適用します。設定の **今すぐ再起動** を押すとすぐに適用されます。ライブラリはアプリとは別に保存されるので、更新やアンインストールをしても残ります。インストールの確認・アンインストール・トラブルシューティングは [INSTALL.md](INSTALL.md) を参照してください。
 
 ## AI の接続
 

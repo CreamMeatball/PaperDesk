@@ -88,7 +88,7 @@ py -3.12 scripts\install_source.py --auto-update
 
 安装完成后，在 macOS 上从“应用程序”（Applications）、在 Windows 上从开始菜单打开 **Paperdesk (beta)**。Windows 上请使用 [python.org](https://www.python.org/downloads/windows/) 的 Python：Windows 11 的智能应用控制可能会拦截 uv 或 conda 安装的 Python。
 
-加上 `--auto-update` 后，Paperdesk 会在后台从 GitHub 下载新版本，并在下次打开时应用。论文库与应用分开保存，更新或卸载都不会删除。安装检查、卸载和问题排查见 [INSTALL.md](INSTALL.md)。
+加上 `--auto-update` 后，Paperdesk 会在后台从 GitHub 下载新版本，并在下次打开时应用；也可以在设置中点 **立即重新启动** 马上应用。论文库与应用分开保存，更新或卸载都不会删除。安装检查、卸载和问题排查见 [INSTALL.md](INSTALL.md)。
 
 ## 连接 AI
 

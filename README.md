@@ -105,7 +105,7 @@ py -3.12 scripts\install_source.py --auto-update
 
 Then open **Paperdesk (beta)** from Applications on macOS or from the Start menu on Windows. On Windows, use Python from [python.org](https://www.python.org/downloads/windows/): Windows 11 Smart App Control can block Python from uv or conda.
 
-**Updates.** With `--auto-update`, Paperdesk downloads new versions from GitHub in the background and applies them the next time it opens.
+**Updates.** With `--auto-update`, Paperdesk downloads new versions from GitHub in the background and applies them the next time it opens, or right away with **Restart now** in Settings.
 
 **Your library** is stored separately from the app, and is kept when you update or uninstall. For checks, uninstalling and troubleshooting, see [INSTALL.md](INSTALL.md).
 
