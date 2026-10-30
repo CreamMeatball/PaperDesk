@@ -336,6 +336,11 @@ def uninstall(prefix: Path) -> None:
 
 
 def main() -> int:
+    # Piped or saved to a file (as AI agents and logs do), Windows output uses the ANSI code page (cp949 on Korean
+    # Windows): UTF-8 readers see broken text, and a character outside it would stop the script.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--prefix", type=Path, default=default_prefix(), help="Where to put the Python environment")
     parser.add_argument("--uninstall", action="store_true", help="Remove the environment and shortcut (keeps your library)")
