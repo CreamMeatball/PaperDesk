@@ -29,11 +29,17 @@ class ReaderUIRegressionTests(unittest.TestCase):
         class MenuAction:
             def __init__(self, title, function): self.title, self.function = title, function
         webview = types.SimpleNamespace(settings={}, create_window=Mock(), start=Mock())
+        info = {'CFBundleName': 'Python'}
+        bundle = Mock(); bundle.localizedInfoDictionary.return_value = None; bundle.infoDictionary.return_value = info
         with tempfile.TemporaryDirectory() as directory, patch.dict('sys.modules', {
-            'webview':webview, 'webview.menu':types.SimpleNamespace(Menu=Menu,MenuAction=MenuAction)
+            'webview':webview, 'webview.menu':types.SimpleNamespace(Menu=Menu,MenuAction=MenuAction),
+            'Foundation':types.SimpleNamespace(NSBundle=types.SimpleNamespace(mainBundle=lambda: bundle))
         }):
             NativeWindowShell(MacPlatform(),Path(directory)).run('http://127.0.0.1:1234/')
         options = webview.start.call_args.kwargs
+        # Started by python, the Dock and app menu would otherwise say "Python" with Python's icon.
+        self.assertEqual(info['CFBundleName'], 'Paperdesk')
+        self.assertEqual(Path(options['icon']).name, 'Paperdesk.icns')
         self.assertEqual(options['menu'][0].title,'__app__')
         action = options['menu'][0].items[0]
         self.assertEqual(action.title,'Settings…')

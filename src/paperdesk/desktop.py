@@ -36,6 +36,18 @@ def _macos_settings_shortcut() -> None:
             break
 
 
+MAC_ICON = Path(__file__).resolve().parents[2] / "packaging" / "macos" / "Paperdesk.icns"  # present in source installs
+
+
+def _macos_app_name() -> None:
+    # The process is Python's, so the Dock and the app menu would say "Python". This must run before the window
+    # starts: pywebview creates the application and its menus from this dictionary when it loads.
+    from Foundation import NSBundle
+
+    bundle = NSBundle.mainBundle()
+    (bundle.localizedInfoDictionary() or bundle.infoDictionary())["CFBundleName"] = APP_NAME
+
+
 class NativeWindowShell(DesktopShell):
     """pywebview: WKWebView on macOS (and Edge WebView2 on Windows later), with the platform's translucency."""
 
@@ -66,17 +78,19 @@ class NativeWindowShell(DesktopShell):
             text_select=True,  # pywebview disables selection by default; readers need it
             **self.platform.window_options(),
         )
-        menu = []
+        menu, icon = [], None
         if self.platform.name == "macos":
             from webview.menu import Menu, MenuAction
             menu = [Menu("__app__", [MenuAction("Settings…", lambda: window.load_url(urljoin(url, "/settings?shell=native")))])]
+            _macos_app_name()
+            icon = str(MAC_ICON) if MAC_ICON.is_file() else None
 
         def started():
             if self.platform.name == "macos":
                 from PyObjCTools.AppHelper import callAfter
                 callAfter(_macos_settings_shortcut)
 
-        webview.start(func=started, menu=menu, private_mode=False, storage_path=str(self.storage))
+        webview.start(func=started, menu=menu, private_mode=False, storage_path=str(self.storage), icon=icon)
 
 
 class BrowserShell(DesktopShell):
