@@ -1,0 +1,40 @@
+# Changelog
+
+Versions follow [Semantic Versioning](https://semver.org/): new features raise the second number and bug fixes the
+third. Before 1.0.0, the first official release, the first number stays 0. The rule and the release steps are in
+[docs/development.md](docs/development.md) (in Korean).
+
+## 0.2.0 — 2026-10-30
+
+This is the first tagged release. From now on, installs and automatic updates follow release tags instead of every
+commit on main.
+
+### Added
+
+- **Source install** for macOS and Windows with one script (`scripts/install_source.py`) and automatic updates from
+  GitHub. A downloaded update applies when the app next starts, or right away with **Restart now** in Settings.
+- **macOS:** "Paperdesk (beta)" in Applications. While it runs, it shows Paperdesk's name and icon.
+- Resizable sidebar and AI panel.
+- READMEs in English, Korean, Chinese and Japanese, with demos.
+- [INSTALL.md](INSTALL.md), written for people and for AI agents, plus one-command installs with Claude Code or Codex.
+
+### Changed
+
+- Updates and new installs use the newest release tag (`vX.Y.Z`). Pre-release tags are not offered, and an install is
+  never moved back to an older version.
+- The sidebar mark is the app logo.
+- Packaged builds (macOS DMG with Sparkle updates, Windows installer, Homebrew) are set aside until the first packaged
+  release.
+
+### Fixed
+
+- **macOS:** with the light theme on a dark system, the window frame and title bar are no longer black.
+- **Settings:** no longer shows a stray "null" when an AI connection works.
+- **Windows:** WebView2's files no longer block restoring a backup.
+- **Command-line restore:** when a restore is blocked, it now explains why instead of printing a traceback.
+- **After an update:** the restart waits until the library is released, so the app no longer quits as "already running".
+- **Uninstall:** running it from the install's own copy no longer ends with a traceback after removing everything.
+
+## 0.1.0
+
+Development versions before tagged releases. They were never tagged.
