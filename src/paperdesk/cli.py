@@ -65,7 +65,7 @@ def command_open(args: argparse.Namespace) -> int:
             app.updates.attach(SourceUpdates(source))
             if source.auto_update:
                 threading.Thread(target=source.fetch, name="paperdesk-source-fetch", daemon=True).start()
-        shell = choose_shell(args.shell, app.platform, app.platform.webview_storage(app.paths.root), app.updates)
+        shell = choose_shell(args.shell, app.platform, app.platform.webview_storage(app.paths.root))
         try:
             server = create_server(app, "127.0.0.1", args.port)
         except OSError:
@@ -124,10 +124,6 @@ def command_mcp(args: argparse.Namespace) -> int:
 
 
 def _launcher() -> tuple[str, list[str]]:
-    if getattr(sys, "frozen", False):
-        if sys.platform == "win32":  # Paperdesk.exe is a windowed program without stdio; MCP needs the console twin.
-            return str(Path(sys.executable).with_name("paperdesk-cli.exe")), ["mcp"]
-        return sys.executable, ["mcp"]
     if sys.platform == "win32":
         # Source install: the signed python.exe (pythonw.exe has no stdio; pip's paperdesk.exe shim is unsigned).
         return str(Path(sys.executable).with_name("python.exe")), ["-m", APP_ID, "mcp"]

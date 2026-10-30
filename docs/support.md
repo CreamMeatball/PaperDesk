@@ -1,8 +1,8 @@
 # Supported beta scope
 
-The first distribution target is Apple Silicon (arm64), macOS 15 or later. The bundle enforces that minimum. macOS 27.0.1 is the development machine verified so far; macOS 15 and a clean second Mac must pass the release checklist before public distribution. Intel Macs are not supported by this beta. Windows 10/11 x64 is available as a source install (`scripts/install_source.py` with Python 3.12 from python.org); a signed Windows installer is not available yet because Smart App Control blocks unsigned programs. Linux is a development shell.
+Paperdesk is installed from source ([INSTALL.md](../INSTALL.md)) on Apple Silicon (arm64) with macOS 15 or later, and on Windows 10/11 x64 with Python 3.12 from python.org. Intel Macs are not supported by this beta. Packaged installers (a macOS DMG, a signed Windows installer) are not provided yet. Linux is a development shell.
 
-PDF limits: 200 MB per file, 500 pages, page dimensions at most 14,400 PDF points, bounded rendering canvases and image decoding. Text PDFs, including multiple columns, are the supported reading/translation input. Scanned pages can be displayed but have no OCR or selectable text. Password-protected PDFs are not supported. Corrupt files display an error. Large, mixed-layout and multilingual PDFs still require the native interaction checks below.
+PDF limits: 200 MB per file, 500 pages, page dimensions at most 14,400 PDF points, bounded rendering canvases and image decoding. Text PDFs, including multiple columns, are the supported reading/translation input. Scanned pages can be displayed but have no OCR or selectable text. Password-protected PDFs are not supported. Corrupt files display an error. Large, mixed-layout and multilingual PDFs still need hands-on checks.
 
 ## AI setup
 
@@ -37,7 +37,3 @@ Backup validation checks the actual database schema and migrates a disposable co
 ## Reporting an issue
 
 **Save diagnostics without content** exports only application/Python/OS versions, architecture and DB schema. It excludes paths, paper names, source text, conversations, options, keys and logs. Nothing is sent automatically. Share a synthetic or public PDF separately if you choose to report a rendering problem.
-
-## Native release acceptance
-
-Use `packaging/macos/release-checks.example.json` for each exact build. Verify fresh installation without Python/Node/CLI developer environments; the minimum macOS; selection/T/E/Q, sentence hover, side/overlay translation, regions, formulas, keyboard navigation and CJK text; Codex and Claude live requests; network loss, sleep, cancellation and resume; backup restore, invalid archives and disk failures; signed old-to-new update with notes/chats/PDFs preserved. Record the tester and date. A failed or untested item blocks public release.

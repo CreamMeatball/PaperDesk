@@ -8,7 +8,7 @@
 
 </div>
 
-![Paperdesk：PDF 与译文并排显示，AI 助手正在解释选中的句子](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/zh/reader.png)
+![Paperdesk：PDF 与译文并排显示，AI 助手正在解释选中的句子](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/zh/reader.png)
 
 Paperdesk 是一款在 macOS 和 Windows 上阅读论文的桌面应用。它按主题文件夹整理论文 PDF，把整篇论文翻译在原文旁边，选中任何内容都能直接问你已经在用的 AI。论文和记录都只保存在你自己的电脑上。
 
@@ -20,25 +20,25 @@ Paperdesk 是一款在 macOS 和 Windows 上阅读论文的桌面应用。它按
 
 打开论文后，Paperdesk 先在本机分析版面（分栏、标题、图、公式），再用你连接的 AI 按段落翻译正文，译好的段落会立即显示。每一页的译文都排在该页旁边，随滚动一起移动。把鼠标移到原文段落上会高亮对应译文，移到译文上则高亮原文。
 
-![滚动：PDF 页面与译文一起移动](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/zh/scroll.gif)
+![滚动：PDF 页面与译文一起移动](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/zh/scroll.gif)
 
 ### 图、表与参考文献预览
 
 把鼠标移到 "Figure 2" 或 "[38, 2, 9]" 上，不用离开当前位置就能看到图、表或参考文献；译文中的引用同样可以预览。参考文献可以加入**待读列表**、在 arXiv 或 Google Scholar 中打开，或者让 AI 介绍这篇论文。
 
-![悬停图引用和参考文献](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/zh/preview.gif)
+![悬停图引用和参考文献](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/zh/preview.gif)
 
 ### 选中即可翻译、解释、提问
 
 选中文字后选择**翻译**（T）、**解释**（E）、**释义**（W）或**提问**（Q），也可以**高亮**（H）或添加**笔记**（C）。回答显示在 **AI 助手**中，每篇论文的对话单独保存。想问图、表或公式时，用**区域选择**拖选即可。
 
-![选中句子并选择“解释”](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/zh/ask.gif)
+![选中句子并选择“解释”](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/zh/ask.gif)
 
 ### 覆盖在原文上，浅色与深色
 
 把译文显示切换为**覆盖在原文上**，就能在每个段落的位置直接读译文；也可以选择**并排显示**或**隐藏译文**。深色模式下 PDF 页面保持白色。
 
-![深色模式下译文覆盖在原文上](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/zh/dark-overlay.png)
+![深色模式下译文覆盖在原文上](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/zh/dark-overlay.png)
 
 ### 其他功能
 
@@ -57,8 +57,8 @@ Paperdesk 是一款在 macOS 和 Windows 上阅读论文的桌面应用。它按
 **macOS**
 
 ```sh
-git clone --depth 1 https://github.com/HojooonKim/paperdesk.git
-cd paperdesk
+git clone --depth 1 https://github.com/HojooonKim/PaperDesk.git
+cd PaperDesk
 python3.12 scripts/install_source.py --auto-update
 ~/.paperdesk-beta/venv/bin/python -m paperdesk
 ```
@@ -66,8 +66,8 @@ python3.12 scripts/install_source.py --auto-update
 **Windows**
 
 ```bat
-git clone --depth 1 https://github.com/HojooonKim/paperdesk.git
-cd paperdesk
+git clone --depth 1 https://github.com/HojooonKim/PaperDesk.git
+cd PaperDesk
 py -3.12 scripts\install_source.py --auto-update
 ```
 
@@ -81,7 +81,7 @@ py -3.12 scripts\install_source.py --auto-update
 
 ```text
 请在这台电脑上安装 Paperdesk。
-按照 https://raw.githubusercontent.com/HojooonKim/paperdesk/main/INSTALL.md 一步一步操作，
+按照 https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md 一步一步操作，
 在系统范围内安装任何东西之前先问我。
 完成后告诉我怎么打开它，以及我还需要设置什么。
 ```
@@ -116,7 +116,7 @@ Paperdesk 不会读取或保存 Codex、Claude 的登录信息。详见 [docs/ai
 - [docs/support.md](docs/support.md)：支持范围、备份与恢复（英文）
 - [docs/keyboard-shortcuts.md](docs/keyboard-shortcuts.md)：阅读器快捷键
 - [docs/ai-integrations.md](docs/ai-integrations.md)、[docs/privacy.md](docs/privacy.md)：AI 连接与数据
-- [docs/development.md](docs/development.md)：架构、开发与发布（韩文）
+- [docs/development.md](docs/development.md)：架构与开发（韩文）
 
 ## 许可证
 

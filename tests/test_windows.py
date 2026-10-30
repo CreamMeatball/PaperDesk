@@ -200,16 +200,7 @@ class PortableBackupTests(unittest.TestCase):
 
 
 class InstalledLayoutTests(unittest.TestCase):
-    """Paths inside the installed Windows app folder (%LOCALAPPDATA%\\Programs\\Paperdesk)."""
-
-    def frozen(self, folder):
-        return mock.patch.multiple(sys, create=True, frozen=True, platform='win32', executable=str(Path(folder)/'Paperdesk.exe'))
-
-    def test_mcp_command_uses_the_console_executable(self):
-        from paperdesk import cli as commands
-        with tempfile.TemporaryDirectory() as folder, self.frozen(folder):
-            command, arguments = commands._launcher()
-        self.assertEqual((Path(command).name, arguments), ('paperdesk-cli.exe', ['mcp']))
+    """Commands a Windows source install hands to other programs."""
 
     def test_source_install_mcp_command_uses_the_signed_console_python(self):
         from paperdesk import cli as commands
@@ -218,18 +209,6 @@ class InstalledLayoutTests(unittest.TestCase):
             command, arguments = commands._launcher()
         self.assertEqual((Path(command).name, arguments), ('python.exe', ['-m', 'paperdesk', 'mcp']))
 
-    def test_build_manifest_and_analysis_runtime_sit_beside_the_executables(self):
-        from paperdesk.services import layout
-        from paperdesk.services.diagnostics import diagnostic_report
-        app, tmp = build_app()
-        self.addCleanup(tmp.cleanup)
-        with tempfile.TemporaryDirectory() as folder:
-            (Path(folder)/'build-manifest.json').write_text(json.dumps({'build': 7, 'source_tree_sha256': 'abc'}), encoding='utf-8')
-            with self.frozen(folder), mock.patch.object(layout, 'WINDOWS', True):
-                report = diagnostic_report(app.paths)
-                python = app.analysis._python()
-        self.assertEqual((report['build'], report['source_tree_sha256']), (7, 'abc'))
-        self.assertEqual(python, Path(folder)/'analysis-runtime'/'python.exe')
 
 
 @unittest.skipUnless(WINDOWS, 'Windows Credential Manager')

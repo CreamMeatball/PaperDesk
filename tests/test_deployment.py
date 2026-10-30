@@ -400,20 +400,6 @@ class DiscoveryAndGateTests(unittest.TestCase):
             explicit.extra_dirs=(str(new.parent),)
             with mock.patch('paperdesk.providers.cli.COMMON_BIN_DIRS',()):self.assertEqual(explicit.discover()['selected'],str(old))
 
-    def test_public_release_requires_license_and_exact_completed_record(self):
-        from .test_updates import script
-        gate=script('release_preflight')
-        with tempfile.TemporaryDirectory() as folder:
-            root=Path(folder);record=root/'checks.json'
-            data={'version':'0.1.0','build':4,'architecture':'arm64','tester':'test','date':'2026-10-28',**{key:True for key in gate.CHECKS}}
-            record.write_text(json.dumps(data))
-            with mock.patch.object(gate,'ROOT',root):
-                with self.assertRaises(ValueError):gate.check_release(record,version='0.1.0',build=4,architecture='arm64')
-                (root/'LICENSE').write_text('Fixture license')
-                gate.check_release(record,version='0.1.0',build=4,architecture='arm64')
-                with self.assertRaises(ValueError):gate.check_release(record,version='0.1.0',build=5,architecture='arm64')
-                data[gate.CHECKS[0]]=False;record.write_text(json.dumps(data))
-                with self.assertRaises(ValueError):gate.check_release(record,version='0.1.0',build=4,architecture='arm64')
 
 
 class ReviewRegressionTests(unittest.TestCase):

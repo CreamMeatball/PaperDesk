@@ -1,4 +1,4 @@
-"""Application updates. The macOS backend delegates download, verification and installation to Sparkle."""
+"""Application updates. Source installs attach a git backend (infrastructure/source_update.py); otherwise the app says it cannot update itself."""
 from __future__ import annotations
 
 from .. import __version__

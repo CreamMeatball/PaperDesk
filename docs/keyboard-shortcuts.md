@@ -17,7 +17,7 @@ In the note editor, Command+Enter or Ctrl+Enter saves and Escape cancels. These 
 
 Letter shortcuts use physical key positions when `KeyboardEvent.code` is available, so the Korean input source does not change H into an unrecognized character. `event.key` remains a fallback for keyboards that omit `code`. Selection actions use the current PDF selection immediately rather than waiting for the floating toolbar's 180 ms delay. They do not reuse an older selection after it has collapsed, intercept text entry, or run while a dialog is open.
 
-Run `node tests/browser/reader_shortcuts.cjs` with Playwright installed to test the browser interactions. The same optional `PAPERDESK_PLAYWRIGHT_MODULE` and `PAPERDESK_CHROMIUM` paths as `local_state.cjs` are supported. The test uses an isolated temporary library, offline demo responses, simulated Korean key events, real pointer selection and annotation persistence. It does not exercise a real macOS input source or WKWebView. Rebuild the frozen macOS app to include these source changes; an existing installed DMG does not read JavaScript from the NAS source checkout.
+Run `node tests/browser/reader_shortcuts.cjs` with Playwright installed to test the browser interactions. The same optional `PAPERDESK_PLAYWRIGHT_MODULE` and `PAPERDESK_CHROMIUM` paths as `local_state.cjs` are supported. The test uses an isolated temporary library, offline demo responses, simulated Korean key events, real pointer selection and annotation persistence. It does not exercise a real macOS input source or WKWebView.
 
 API references: [KeyboardEvent.code](https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/code), [KeyboardEvent.isComposing](https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/isComposing).
 

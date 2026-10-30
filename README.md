@@ -8,7 +8,7 @@
 
 </div>
 
-![Paperdesk: a PDF with its translation side by side and the AI Assistant explaining a selected sentence](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/en/reader.png)
+![Paperdesk: a PDF with its translation side by side and the AI Assistant explaining a selected sentence](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/en/reader.png)
 
 Paperdesk is a desktop app for reading research papers on macOS and Windows.
 
@@ -28,7 +28,7 @@ When you open a paper, Paperdesk analyzes its layout on your computer (columns, 
 
 Each page's translation sits beside that page and moves with it as you scroll. Point at a paragraph to highlight its translation, or point at the translation to highlight the original.
 
-![Scrolling: each PDF page and its translation move together](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/en/scroll.gif)
+![Scrolling: each PDF page and its translation move together](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/en/scroll.gif)
 
 ### Previews for figures, tables and citations
 
@@ -36,7 +36,7 @@ Point at "Figure 2" or "[38, 2, 9]" to see the figure, table or reference withou
 
 From a reference preview you can add the paper to your Reading List, open it on arXiv or Google Scholar, or ask the AI what it is about.
 
-![Hovering a figure reference, then a citation](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/en/preview.gif)
+![Hovering a figure reference, then a citation](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/en/preview.gif)
 
 ### Select, then translate, explain or ask
 
@@ -44,13 +44,13 @@ Select text and choose **Translate** (T), **Explain** (E), **Define** (W) or **A
 
 Answers appear in the AI Assistant, and each paper keeps its own conversation. To ask about a figure, table or equation, use **Select area** and drag over it.
 
-![Selecting a sentence and choosing Explain](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/en/ask.gif)
+![Selecting a sentence and choosing Explain](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/en/ask.gif)
 
 ### Over the original, light or dark
 
 Switch the translation to **Over the original** to read it in place of each paragraph, or to **Side by side** or **Hide translation**. In dark mode the PDF pages stay white.
 
-![Dark mode with the translation over the original](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/en/dark-overlay.png)
+![Dark mode with the translation over the original](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/en/dark-overlay.png)
 
 ### Also included
 
@@ -74,8 +74,8 @@ Switch the translation to **Over the original** to read it in place of each para
 **macOS**
 
 ```sh
-git clone --depth 1 https://github.com/HojooonKim/paperdesk.git
-cd paperdesk
+git clone --depth 1 https://github.com/HojooonKim/PaperDesk.git
+cd PaperDesk
 python3.12 scripts/install_source.py --auto-update
 ~/.paperdesk-beta/venv/bin/python -m paperdesk
 ```
@@ -83,8 +83,8 @@ python3.12 scripts/install_source.py --auto-update
 **Windows**
 
 ```bat
-git clone --depth 1 https://github.com/HojooonKim/paperdesk.git
-cd paperdesk
+git clone --depth 1 https://github.com/HojooonKim/PaperDesk.git
+cd PaperDesk
 py -3.12 scripts\install_source.py --auto-update
 ```
 
@@ -100,7 +100,7 @@ Paste this into Claude Code, Codex or another coding agent:
 
 ```text
 Install Paperdesk on this computer by following
-https://raw.githubusercontent.com/HojooonKim/paperdesk/main/INSTALL.md step by step.
+https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md step by step.
 Ask me before installing anything system-wide, and when you are done,
 tell me how to open it and what I still need to set up.
 ```
@@ -144,7 +144,7 @@ See [docs/privacy.md](docs/privacy.md).
 - [docs/support.md](docs/support.md): what is supported, and how backup and recovery work
 - [docs/keyboard-shortcuts.md](docs/keyboard-shortcuts.md): reader shortcuts
 - [docs/ai-integrations.md](docs/ai-integrations.md) and [docs/privacy.md](docs/privacy.md): AI connections and data
-- [docs/development.md](docs/development.md): architecture, development and releases (in Korean)
+- [docs/development.md](docs/development.md): architecture and development (in Korean)
 
 ## License
 

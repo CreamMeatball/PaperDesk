@@ -1,9 +1,6 @@
-import base64
 import importlib.util
 import json
-import queue
 import sqlite3
-import tempfile
 import threading
 import unittest
 import urllib.error
@@ -13,7 +10,6 @@ from pathlib import Path
 from unittest import mock
 
 from paperdesk.domain.errors import InvalidInput, ProviderUnavailable
-from paperdesk.infrastructure.macos_updates import SparkleUpdates, valid_update_configuration
 from paperdesk.infrastructure.sqlite import Database, MIGRATIONS
 from paperdesk.ports.updates import UpdateBackend, UpdateState
 from paperdesk.services.updates import UpdateService
@@ -55,7 +51,6 @@ class UpdateTests(unittest.TestCase):
         self.assertNotIn('up to date', state['message'])
         with self.assertRaises(ProviderUnavailable):
             service.check()
-        self.assertFalse(SparkleUpdates().state().available)
 
     def test_native_backend_receives_manual_check_and_opt_in(self):
         backend = RecordingUpdates()
@@ -71,44 +66,6 @@ class UpdateTests(unittest.TestCase):
         for bad in ['yes', 1, None]:
             with self.assertRaises(InvalidInput):
                 service.configure(bad)
-
-    def test_native_check_is_dispatched_from_http_thread_to_main_thread(self):
-        calls = []
-        class Controller:
-            def checkForUpdates_(self, sender):
-                self_thread = threading.current_thread()
-                calls.append(self_thread)
-        native = SparkleUpdates()
-        native._controller = Controller()
-        jobs = queue.Queue()
-        native._dispatch = jobs.put
-        errors = []
-        def request():
-            try:
-                native.check()
-            except Exception as error:
-                errors.append(error)
-        worker = threading.Thread(target=request)
-        worker.start()
-        jobs.get(timeout=2)()
-        worker.join(timeout=2)
-        self.assertFalse(worker.is_alive())
-        self.assertEqual(errors, [])
-        self.assertEqual(calls, [threading.main_thread()])
-
-    def test_update_configuration_requires_https_and_pinned_public_key(self):
-        key = base64.b64encode(bytes(range(32))).decode()
-        self.assertTrue(valid_update_configuration('https://example.org/appcast.xml', key))
-        for feed, public_key in [('http://example.org/feed',key), ('https://name:secret@example.org/feed',key),
-                                 ('https://example.org/feed','bad'), ('file:///tmp/feed',key)]:
-            self.assertFalse(valid_update_configuration(feed, public_key))
-        metadata = script('build_macos').bundle_metadata(version='1.2.3', build=27,
-                           feed_url='https://example.org/appcast.xml', public_key=key)
-        self.assertEqual(metadata['CFBundleVersion'], '27')
-        self.assertFalse(metadata['SUEnableAutomaticChecks'])
-        self.assertFalse(metadata['SUAutomaticallyUpdate'])
-        self.assertFalse(metadata['SUAllowsAutomaticUpdates'])
-        self.assertTrue(metadata['SUVerifyUpdateBeforeExtraction'])
 
     def test_api_opens_native_ui_and_persists_user_choice_without_ai(self):
         app, tmp = build_app()
@@ -166,56 +123,3 @@ class UpdateTests(unittest.TestCase):
                 Database(app.paths.database)
         finally:
             tmp.cleanup()
-
-
-class MacReleaseTests(unittest.TestCase):
-    def test_cask_and_bundle_share_the_minimum_macos_version(self):
-        from paperdesk import MAC_MINIMUM_CASK, MAC_MINIMUM_VERSION
-        metadata = script('build_macos').bundle_metadata(version='1.2.3', build=27)
-        artifact = {'version':'1.2.3', 'build':27, 'bundle_id':'org.paperdesk.Paperdesk', 'arch':'arm64', 'sha256':'a'*64}
-        text = script('release_macos').render_cask('example/paperdesk', [artifact])
-        self.assertEqual(metadata['LSMinimumSystemVersion'], MAC_MINIMUM_VERSION)
-        self.assertEqual((MAC_MINIMUM_VERSION, MAC_MINIMUM_CASK), ('15.0', 'sequoia'))
-        self.assertIn(f'depends_on macos: :{MAC_MINIMUM_CASK}', text)
-
-    def test_cask_uses_native_app_versions_and_keeps_user_data(self):
-        release = script('release_macos')
-        shared = {'version':'1.2.3', 'build':27, 'bundle_id':'org.paperdesk.Paperdesk'}
-        arm = {**shared, 'arch':'arm64', 'sha256':'a'*64}
-        intel = {**shared, 'arch':'x86_64', 'sha256':'b'*64}
-        text = release.render_cask('example/paperdesk', [arm, intel])
-        self.assertIn('version "1.2.3,27"', text)
-        self.assertIn('app "Paperdesk.app"', text)
-        self.assertIn('auto_updates true', text)
-        self.assertIn('on_arm do', text)
-        self.assertIn('on_intel do', text)
-        self.assertNotIn('zap', text)
-        self.assertNotIn('Application Support', text)
-        with self.assertRaises(ValueError):
-            release.render_cask('example/paperdesk', [arm, {**intel, 'build':26}])
-
-    def test_unsigned_development_artifact_cannot_be_published(self):
-        release = script('release_macos')
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / 'Paperdesk-1.2.3-27-arm64.dmg'
-            path.write_bytes(b'example dmg')
-            meta = {'version':'1.2.3','build':27,'arch':'arm64','updates':False,'signed':False,'notarized':False}
-            path.with_suffix('.json').write_text(json.dumps(meta))
-            with self.assertRaises(ValueError):
-                release.artifact(path)
-
-    def test_appcast_checks_expected_artifact_signature_field_and_build(self):
-        release = script('release_macos')
-        signature = base64.b64encode(bytes(64)).decode()
-        with tempfile.TemporaryDirectory() as folder:
-            dmg = Path(folder) / 'app.dmg'
-            dmg.write_bytes(b'abc')
-            feed = Path(folder) / 'appcast.xml'
-            xml = ('<rss xmlns:sparkle="'+release.SPARKLE+'"><channel><item>'
-                   '<sparkle:version>27</sparkle:version><enclosure url="https://example.org/app.dmg" '
-                   'length="3" sparkle:edSignature="'+signature+'" /></item></channel></rss>')
-            feed.write_text(xml)
-            release.verify_feed(feed, {'build':27,'path':dmg}, 'https://example.org/app.dmg')
-            feed.write_text(xml.replace('length="3"','length="4"'))
-            with self.assertRaises(ValueError):
-                release.verify_feed(feed, {'build':27,'path':dmg}, 'https://example.org/app.dmg')

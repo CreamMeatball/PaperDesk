@@ -130,7 +130,7 @@ async function waitFor(fn) { for(let i=0;i<100;i++) { if(await fn()) return; awa
   await updates.waitFor();
   assert(await updates.getByRole('button',{name:'Check for updates'}).isDisabled());
   assert(await updates.getByRole('checkbox').isDisabled());
-  // Exercise the settings UI contract without loading Cocoa/Sparkle in Linux.
+  // Exercise the settings UI contract without loading Cocoa in Linux.
   let automatic=false, checks=0;
   await context.route('**/api/updates',route=>route.fulfill({json:{version:'0.1.0',available:true,can_check:true,automatic_checks:automatic,message:''}}));
   await context.route('**/api/updates/preferences',route=>{

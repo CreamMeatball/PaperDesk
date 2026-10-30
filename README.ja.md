@@ -8,7 +8,7 @@
 
 </div>
 
-![Paperdesk：PDF と翻訳を並べて表示し、選んだ文を AI アシスタントが説明している画面](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/ja/reader.png)
+![Paperdesk：PDF と翻訳を並べて表示し、選んだ文を AI アシスタントが説明している画面](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/ja/reader.png)
 
 Paperdesk は macOS と Windows で論文を読むためのデスクトップアプリです。論文 PDF をテーマ別のフォルダで整理し、論文全体を原文の隣に翻訳し、選んだ部分をいつも使っている AI にその場で質問できます。論文と記録はすべて自分のコンピュータにだけ保存されます。
 
@@ -20,25 +20,25 @@ Paperdesk は macOS と Windows で論文を読むためのデスクトップア
 
 論文を開くと、Paperdesk はまず手元のコンピュータで段組み・見出し・図・数式などのレイアウトを解析し、接続した AI で本文を段落ごとに翻訳します。訳し終えた段落からすぐに表示されます。各ページの翻訳はそのページの隣に並び、スクロールと一緒に動きます。原文の段落にマウスを重ねると対応する訳文が、訳文に重ねると原文が強調されます。
 
-![スクロール：PDF のページと翻訳が一緒に動く様子](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/ja/scroll.gif)
+![スクロール：PDF のページと翻訳が一緒に動く様子](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/ja/scroll.gif)
 
 ### 図・表・参考文献のプレビュー
 
 「Figure 2」や「[38, 2, 9]」にマウスを重ねると、読んでいる場所を離れずに図・表・参考文献を確認できます。訳文の中の参照でも同じように使えます。参考文献は**あとで読む**に追加したり、arXiv や Google Scholar で開いたり、どんな論文か AI に聞いたりできます。
 
-![図の参照と参考文献にマウスを重ねた様子](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/ja/preview.gif)
+![図の参照と参考文献にマウスを重ねた様子](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/ja/preview.gif)
 
 ### 選んで翻訳・説明・質問
 
 テキストを選んで**翻訳**（T）・**説明**（E）・**意味**（W）・**質問**（Q）を選ぶか、**ハイライト**（H）や**メモ**（C）を残せます。回答は **AI アシスタント**に表示され、会話は論文ごとに保存されます。図・表・数式は**範囲選択**でドラッグして質問できます。
 
-![文を選んで「説明」を選ぶ様子](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/ja/ask.gif)
+![文を選んで「説明」を選ぶ様子](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/ja/ask.gif)
 
 ### 原文の上に翻訳、ライトとダーク
 
 翻訳の表示を**原文の上に**に切り替えると、各段落の位置でそのまま訳文を読めます。**並べて表示**や**翻訳を隠す**も選べます。ダークモードでも PDF の紙面は白いままです。
 
-![ダークモードで原文の上に翻訳を表示した画面](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/ja/dark-overlay.png)
+![ダークモードで原文の上に翻訳を表示した画面](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/ja/dark-overlay.png)
 
 ### そのほか
 
@@ -57,8 +57,8 @@ Paperdesk は macOS と Windows で論文を読むためのデスクトップア
 **macOS**
 
 ```sh
-git clone --depth 1 https://github.com/HojooonKim/paperdesk.git
-cd paperdesk
+git clone --depth 1 https://github.com/HojooonKim/PaperDesk.git
+cd PaperDesk
 python3.12 scripts/install_source.py --auto-update
 ~/.paperdesk-beta/venv/bin/python -m paperdesk
 ```
@@ -66,8 +66,8 @@ python3.12 scripts/install_source.py --auto-update
 **Windows**
 
 ```bat
-git clone --depth 1 https://github.com/HojooonKim/paperdesk.git
-cd paperdesk
+git clone --depth 1 https://github.com/HojooonKim/PaperDesk.git
+cd PaperDesk
 py -3.12 scripts\install_source.py --auto-update
 ```
 
@@ -81,7 +81,7 @@ Claude Code や Codex などのコーディングエージェントに、次の�
 
 ```text
 このコンピュータに Paperdesk をインストールしてください。
-https://raw.githubusercontent.com/HojooonKim/paperdesk/main/INSTALL.md の手順に順番に従い、
+https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md の手順に順番に従い、
 システム全体に何かをインストールする前には必ず確認してください。
 終わったら、開き方と、まだ自分で設定する必要があることを教えてください。
 ```
@@ -116,7 +116,7 @@ PDF の閲覧、プレビュー、保存済みの翻訳・メモ・会話はオ�
 - [docs/support.md](docs/support.md)：サポート範囲、バックアップと復旧（英語）
 - [docs/keyboard-shortcuts.md](docs/keyboard-shortcuts.md)：リーダーのショートカット
 - [docs/ai-integrations.md](docs/ai-integrations.md)、[docs/privacy.md](docs/privacy.md)：AI 接続とデータ
-- [docs/development.md](docs/development.md)：構成・開発・リリース（韓国語）
+- [docs/development.md](docs/development.md)：構成と開発（韓国語）
 
 ## ライセンス
 

@@ -2,8 +2,6 @@
 import platform
 import sqlite3
 import sys
-import json
-from pathlib import Path
 from contextlib import closing
 
 from .. import __version__, STORAGE_ID
@@ -17,13 +15,4 @@ def diagnostic_report(paths) -> dict:
             'architecture': platform.machine(), 'database_schema': schema,
             'includes': ['versions', 'architecture', 'schema'],
             'excludes': ['papers', 'filenames', 'paths', 'prompts', 'conversations', 'settings', 'credentials', 'logs']}
-    if getattr(sys, 'frozen', False):
-        # Windows: beside Paperdesk.exe; macOS: Paperdesk.app/Contents/Resources.
-        manifest = (Path(sys.executable).parent if sys.platform == 'win32' else Path(sys.executable).parents[1]/'Resources')/'build-manifest.json'
-        try:
-            build = json.loads(manifest.read_text(encoding='utf-8'))
-            report['build'] = build.get('build')
-            report['source_tree_sha256'] = build.get('source_tree_sha256')
-        except (OSError, ValueError):
-            pass
     return report

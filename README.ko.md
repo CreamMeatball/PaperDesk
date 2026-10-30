@@ -8,7 +8,7 @@
 
 </div>
 
-![Paperdesk: PDF와 번역을 나란히 보고, 선택한 문장을 AI 도우미가 설명하는 화면](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/ko/reader.png)
+![Paperdesk: PDF와 번역을 나란히 보고, 선택한 문장을 AI 도우미가 설명하는 화면](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/ko/reader.png)
 
 Paperdesk는 macOS·Windows에서 논문을 읽는 데스크톱 앱입니다. 논문 PDF를 주제별 폴더로 정리하고, 논문 전체를 원문 옆에 번역하며, 고른 부분을 이미 쓰고 있는 AI에게 바로 물어볼 수 있습니다. 논문과 기록은 모두 내 컴퓨터에만 저장됩니다.
 
@@ -20,25 +20,25 @@ Paperdesk는 macOS·Windows에서 논문을 읽는 데스크톱 앱입니다. �
 
 논문을 열면 내 컴퓨터에서 단·제목·그림·수식 같은 구성을 분석한 뒤, 연결한 AI로 본문을 문단 단위로 번역합니다. 번역은 끝난 문단부터 바로 보입니다. 각 쪽의 번역은 그 쪽 옆에 붙어 스크롤과 함께 움직이고, 원문 문단에 마우스를 올리면 해당 번역이, 번역에 올리면 원문이 표시됩니다.
 
-![스크롤: PDF 쪽과 번역이 함께 움직이는 모습](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/ko/scroll.gif)
+![스크롤: PDF 쪽과 번역이 함께 움직이는 모습](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/ko/scroll.gif)
 
 ### 그림·표·참고문헌 미리보기
 
 "Figure 2"나 "[38, 2, 9]"에 마우스를 올리면 읽던 위치를 벗어나지 않고 그림·표·참고문헌을 바로 볼 수 있습니다. 번역문 안의 참조에도 똑같이 동작합니다. 참고문헌은 **읽어볼 논문**에 추가하거나, arXiv·Google Scholar에서 열거나, AI에게 어떤 논문인지 물어볼 수 있습니다.
 
-![그림 참조와 참고문헌에 마우스를 올린 모습](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/ko/preview.gif)
+![그림 참조와 참고문헌에 마우스를 올린 모습](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/ko/preview.gif)
 
 ### 선택해서 번역·설명·질문
 
 글을 선택하고 **번역**(T)·**설명**(E)·**뜻**(W)·**질문**(Q)을 고르거나, **하이라이트**(H)·**메모**(C)를 남깁니다. 답은 **AI 도우미**에 나오고 대화는 논문마다 따로 저장됩니다. 그림·표·수식은 **영역 선택**으로 드래그해 물어볼 수 있습니다.
 
-![문장을 선택하고 설명을 고르는 모습](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/ko/ask.gif)
+![문장을 선택하고 설명을 고르는 모습](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/ko/ask.gif)
 
 ### 원문 위에 번역, 라이트·다크
 
 번역 표시를 **원문 위에**로 바꾸면 문단 자리에서 바로 번역을 읽을 수 있습니다. **나란히**·**번역 숨기기**도 고를 수 있습니다. 다크 모드에서도 PDF 지면은 흰색 그대로입니다.
 
-![다크 모드에서 원문 위에 번역을 표시한 화면](https://raw.githubusercontent.com/HojooonKim/paperdesk/media/ko/dark-overlay.png)
+![다크 모드에서 원문 위에 번역을 표시한 화면](https://raw.githubusercontent.com/HojooonKim/PaperDesk/media/ko/dark-overlay.png)
 
 ### 그 밖에
 
@@ -57,8 +57,8 @@ Paperdesk는 macOS·Windows에서 논문을 읽는 데스크톱 앱입니다. �
 **macOS**
 
 ```sh
-git clone --depth 1 https://github.com/HojooonKim/paperdesk.git
-cd paperdesk
+git clone --depth 1 https://github.com/HojooonKim/PaperDesk.git
+cd PaperDesk
 python3.12 scripts/install_source.py --auto-update
 ~/.paperdesk-beta/venv/bin/python -m paperdesk
 ```
@@ -66,8 +66,8 @@ python3.12 scripts/install_source.py --auto-update
 **Windows**
 
 ```bat
-git clone --depth 1 https://github.com/HojooonKim/paperdesk.git
-cd paperdesk
+git clone --depth 1 https://github.com/HojooonKim/PaperDesk.git
+cd PaperDesk
 py -3.12 scripts\install_source.py --auto-update
 ```
 
@@ -81,7 +81,7 @@ Claude Code, Codex 같은 코딩 에이전트에 아래 내용을 붙여 넣으�
 
 ```text
 이 컴퓨터에 Paperdesk를 설치해 줘.
-https://raw.githubusercontent.com/HojooonKim/paperdesk/main/INSTALL.md 를 순서대로 따라 하고,
+https://raw.githubusercontent.com/HojooonKim/PaperDesk/main/INSTALL.md 를 순서대로 따라 하고,
 시스템 전체에 무언가를 설치하기 전에는 먼저 물어봐 줘.
 끝나면 여는 방법과 내가 더 설정해야 할 것을 알려 줘.
 ```
@@ -116,7 +116,7 @@ PDF 읽기, 미리보기, 저장된 번역·메모·대화는 오프라인으로
 - [docs/support.md](docs/support.md): 지원 범위, 백업과 복구 (영문)
 - [docs/keyboard-shortcuts.md](docs/keyboard-shortcuts.md): 리더 단축키
 - [docs/ai-integrations.md](docs/ai-integrations.md), [docs/privacy.md](docs/privacy.md): AI 연결과 데이터
-- [docs/development.md](docs/development.md): 구조, 개발, 배포
+- [docs/development.md](docs/development.md): 구조와 개발
 
 ## 라이선스
 

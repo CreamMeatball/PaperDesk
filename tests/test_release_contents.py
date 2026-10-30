@@ -1,9 +1,4 @@
-import importlib.util
-import sys
-import types
 import unittest
-from pathlib import Path
-from unittest.mock import Mock, patch
 
 from paperdesk.domain.errors import InvalidInput
 from paperdesk.ports.ai import CommandResult
@@ -33,19 +28,3 @@ class ReleaseContentsTests(unittest.TestCase):
                     self.assertEqual(app.settings.load().target_language,'Korean')
                     with self.assertRaises(InvalidInput):app.settings.update_general(provider=provider)
                 finally:tmp.cleanup()
-
-    def test_mac_builder_rejects_bundled_test_and_preview_modules(self):
-        path=Path(__file__).resolve().parents[1]/'scripts/build_macos.py'
-        spec=importlib.util.spec_from_file_location('build_macos_contents',path)
-        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-        reader=Mock()
-        modules={
-            'PyInstaller':types.ModuleType('PyInstaller'),
-            'PyInstaller.archive':types.ModuleType('PyInstaller.archive'),
-            'PyInstaller.archive.readers':types.SimpleNamespace(CArchiveReader=reader)}
-        with patch.dict(sys.modules,modules):
-            for forbidden in ['tests.fixtures','experiments.chatgpt_plan','paperdesk.providers.demo','paperdesk.providers.chatgpt_plan']:
-                reader.return_value.open_embedded_archive.return_value.toc={'paperdesk.app':None,forbidden:None}
-                with self.assertRaises(ValueError):module.verify_production_modules(Path('/tmp/Paperdesk'))
-            reader.return_value.open_embedded_archive.return_value.toc={'paperdesk.app':None,'paperdesk.providers.codex_cli':None}
-            module.verify_production_modules(Path('/tmp/Paperdesk'))

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib.util
-import sys
 import webbrowser
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -12,7 +11,6 @@ from urllib.parse import urljoin
 
 from . import APP_NAME
 from .platforms import Platform
-from .services.updates import UpdateService
 
 
 class DesktopShell(ABC):
@@ -44,10 +42,9 @@ class NativeWindowShell(DesktopShell):
     name = "native"
     blocks = True
 
-    def __init__(self, platform: Platform, storage: Path, updates: UpdateService | None = None) -> None:
+    def __init__(self, platform: Platform, storage: Path) -> None:
         self.platform = platform
         self.storage = storage
-        self.updates = updates
 
     @classmethod
     def is_available(cls) -> bool:
@@ -56,13 +53,6 @@ class NativeWindowShell(DesktopShell):
     def run(self, url: str) -> None:
         import webview  # optional dependency, imported only when a window is requested
         webview.settings['ALLOW_DOWNLOADS'] = True
-
-        updater = None
-        # Sparkle only works inside the packaged .app; source installs attach their own git updates.
-        if self.platform.name == "macos" and self.updates is not None and getattr(sys, "frozen", False):
-            from .infrastructure.macos_updates import SparkleUpdates
-            updater = SparkleUpdates()
-            self.updates.attach(updater)
 
         self.storage.mkdir(parents=True, exist_ok=True)
         window = webview.create_window(
@@ -85,8 +75,6 @@ class NativeWindowShell(DesktopShell):
             if self.platform.name == "macos":
                 from PyObjCTools.AppHelper import callAfter
                 callAfter(_macos_settings_shortcut)
-            if updater:
-                updater.start()
 
         webview.start(func=started, menu=menu, private_mode=False, storage_path=str(self.storage))
 
@@ -105,9 +93,9 @@ class BrowserShell(DesktopShell):
         webbrowser.open(url)
 
 
-def choose_shell(preference: str, platform: Platform, storage: Path, updates: UpdateService | None = None) -> DesktopShell:
+def choose_shell(preference: str, platform: Platform, storage: Path) -> DesktopShell:
     if preference in ("auto", "native") and NativeWindowShell.is_available():
-        return NativeWindowShell(platform, storage, updates)
+        return NativeWindowShell(platform, storage)
     if preference == "native":
         raise RuntimeError("네이티브 창에 필요한 pywebview가 설치되어 있지 않아요.")
     return BrowserShell()

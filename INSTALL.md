@@ -21,8 +21,8 @@ On Windows, use Python from python.org. Its `python.exe` is signed. Windows 11 S
 ## Install on macOS
 
 ```sh
-git clone --depth 1 https://github.com/HojooonKim/paperdesk.git
-cd paperdesk
+git clone --depth 1 https://github.com/HojooonKim/PaperDesk.git
+cd PaperDesk
 python3.12 scripts/install_source.py --auto-update
 ```
 
@@ -35,8 +35,8 @@ Open the app:
 ## Install on Windows (PowerShell or Command Prompt)
 
 ```bat
-git clone --depth 1 https://github.com/HojooonKim/paperdesk.git
-cd paperdesk
+git clone --depth 1 https://github.com/HojooonKim/PaperDesk.git
+cd PaperDesk
 py -3.12 scripts\install_source.py --auto-update
 ```
 

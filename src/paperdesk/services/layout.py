@@ -121,10 +121,6 @@ class LayoutAnalysis:
             return {"state": "queued"}
 
     def _python(self):
-        if getattr(sys, "frozen", False):
-            if WINDOWS:  # Beside Paperdesk.exe in the installed folder.
-                return Path(sys.executable).parent / "analysis-runtime" / "python.exe"
-            return Path(sys.executable).parents[1] / "Resources" / "analysis-runtime" / "bin" / "python3.12"
         return Path(os.environ.get("PAPERDESK_ANALYSIS_PYTHON", sys.executable))
 
     def _run(self, doc_id):
